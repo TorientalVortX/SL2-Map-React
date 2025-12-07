@@ -1,0 +1,9 @@
+{
+  "name": "SL2 Map",
+  "short_name": "SL2 Map",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": []
+}

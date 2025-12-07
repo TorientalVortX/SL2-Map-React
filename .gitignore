@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Vite build output
+dist/
+
+# Local env
+.env
+.env.*
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.DS_Store
+
+# Generated assets
+# Keep public assets tracked so they deploy (tiles, cache manifest, sw, headers)
+mapfile.png
+deploy-cloudflare-pages.yml

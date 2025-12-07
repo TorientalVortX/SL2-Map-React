@@ -1,0 +1,698 @@
+/* Reset and base styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+    background: #1a1a1a;
+    color: #fff;
+}
+
+/* Main container */
+#mapContainer {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Toggle button for controls */
+.toggle-btn {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 1001;
+    width: 48px;
+    height: 48px;
+    background: rgba(0, 0, 0, 0.9);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+}
+
+.toggle-btn:hover {
+    background: rgba(0, 0, 0, 1);
+    transform: scale(1.05);
+}
+
+.hamburger-icon {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.toggle-btn:active {
+    transform: scale(0.95);
+    background: rgba(0, 0, 0, 1);
+}
+
+.hamburger-icon span {
+    width: 20px;
+    height: 2px;
+    background: #fff;
+    border-radius: 1px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggle-btn.active .hamburger-icon span:nth-child(1) {
+    transform: rotate(45deg) translate(6px, 6px);
+}
+
+.toggle-btn.active .hamburger-icon span:nth-child(2) {
+    opacity: 0;
+    transform: scale(0);
+}
+
+.toggle-btn.active .hamburger-icon span:nth-child(3) {
+    transform: rotate(-45deg) translate(6px, -6px);
+}
+
+/* Controls panel */
+.controls-panel {
+    position: fixed;
+    top: 20px;
+    left: 80px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transform: translateX(-120%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.controls-panel.visible {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.control-group {
+    display: flex;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.9);
+    padding: 12px;
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.search-group {
+    min-width: 280px;
+}
+
+#searchInput {
+    flex: 1;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.95);
+    color: #333;
+    font-size: 14px;
+    font-weight: 500;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+#searchInput:focus {
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.5);
+}
+
+#searchInput::placeholder {
+    color: #666;
+}
+
+button {
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    background: #4a90e2;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    touch-action: manipulation;
+}
+
+button.secondary {
+    background: #6c757d;
+}
+
+button.secondary:hover {
+    background: #5a6268;
+}
+
+button:hover {
+    background: #357abd;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+button:active {
+    transform: translateY(0);
+}
+
+button svg {
+    pointer-events: none;
+}
+
+.search-btn {
+    background: #28a745;
+    min-width: 44px;
+    padding: 12px;
+}
+
+.search-btn:hover {
+    background: #218838;
+}
+
+.zoom-btn {
+    background: #6c757d;
+    min-width: 44px;
+    padding: 12px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.zoom-btn:hover {
+    background: #5a6268;
+}
+
+.reset-btn {
+    background: #17a2b8;
+    min-width: 44px;
+    padding: 12px;
+}
+
+.reset-btn:hover {
+    background: #138496;
+}
+
+.debug-btn {
+    background: #ff6b35;
+    white-space: nowrap;
+}
+
+.debug-btn:hover {
+    background: #e55a2b;
+}
+
+.debug-mode-btn {
+    background: #9b59b6;
+    white-space: nowrap;
+}
+
+.debug-mode-btn:hover {
+    background: #8e44ad;
+}
+
+.debug-mode-btn.active {
+    background: #e74c3c;
+    box-shadow: 0 0 15px rgba(231, 76, 60, 0.4);
+}
+
+#toggleDebug {
+    transition: all 0.3s ease;
+}
+
+#toggleDebug:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+#zoomIn, #zoomOut {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+/* Map canvas */
+#mapCanvas {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    cursor: grab;
+}
+
+#mapCanvas.dragging {
+    cursor: grabbing;
+}
+
+#mapGrid {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+    transition: transform 0.1s ease-out;
+    will-change: transform;
+}
+
+/* Tile styles for large images */
+.map-tile {
+    position: absolute;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: opacity 0.2s ease-in-out;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: pixelated;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+    opacity: 0;
+}
+
+/* World map image */
+.world-map-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    object-fit: cover;
+    transition: opacity 0.3s ease;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: pixelated;
+    will-change: transform;
+    backface-visibility: hidden;
+    z-index: 1;
+}
+
+.map-tile.loading {
+    background: linear-gradient(45deg, #2a2a2a 25%, #333 25%, #333 50%, #2a2a2a 50%, #2a2a2a 75%, #333 75%);
+    background-size: 40px 40px;
+    animation: loading-stripes 3s linear infinite;
+    opacity: 0.3;
+}
+
+.map-tile.loaded {
+    opacity: 1;
+}
+
+.map-tile.error {
+    background-color: #2a2a2a;
+    border: 1px dashed #ff6b6b;
+    opacity: 0.4;
+    position: relative;
+}
+
+.map-tile.error::after {
+    content: "⚠";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #ff6b6b;
+    font-size: 24px;
+    font-weight: bold;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+/* Show error warning icons only in debug mode */
+.debug-mode .map-tile.error::after {
+    opacity: 1;
+}
+
+.map-tile.missing {
+    background-color: #000000 !important;
+    background-image: none !important;
+    opacity: 1;
+    border: none;
+}
+
+.map-tile.unloaded {
+    opacity: 0;
+}
+
+@keyframes loading-stripes {
+    0% { background-position: 0 0; }
+    100% { background-position: 40px 40px; }
+}
+
+/* Pin layer */
+#pinLayer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 100;
+}
+
+/* Map pins */
+.map-pin {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    background: #ff4444;
+    border: 3px solid white;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg) translate(-50%, -50%);
+    cursor: pointer;
+    pointer-events: auto;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.map-pin::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: white;
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.map-pin:hover {
+    transform: rotate(-45deg) translate(-50%, -50%) scale(1.2);
+    box-shadow: 0 4px 15px rgba(255, 68, 68, 0.5);
+}
+
+.map-pin.important {
+    background: #ffd700;
+}
+
+.map-pin.quest {
+    background: #00ff88;
+}
+
+/* Location info panel */
+#locationInfo {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    right: 20px;
+    max-width: 400px;
+    background: rgba(0, 0, 0, 0.9);
+    border-radius: 8px;
+    padding: 20px;
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 1001;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+#locationInfo.hidden {
+    transform: translateY(100%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+#closeInfo {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    font-size: 18px;
+}
+
+#locationName {
+    margin-bottom: 10px;
+    color: #ffd700;
+}
+
+#locationDescription {
+    line-height: 1.5;
+    opacity: 0.9;
+}
+
+/* Loading indicator */
+#loadingIndicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 20px 40px;
+    border-radius: 8px;
+    z-index: 2000;
+    display: none;
+}
+
+#loadingIndicator.visible {
+    display: block;
+}
+
+/* Preload modal */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal {
+    width: min(520px, 92vw);
+    background: rgba(0,0,0,0.92);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+}
+
+.modal h2 {
+    margin-bottom: 12px;
+    color: #ffd700;
+}
+
+.modal p {
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.preload-progress {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid rgba(255,255,255,0.2);
+    border-top-color: #4a90e2;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .toggle-btn {
+        top: 15px;
+        left: 15px;
+        width: 44px;
+        height: 44px;
+    }
+
+    .controls-panel {
+        position: fixed;
+        top: 15px;
+        left: 70px;
+        right: 15px;
+        max-width: none;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .control-group {
+        padding: 10px;
+        border-radius: 10px;
+    }
+
+    .search-group {
+        min-width: auto;
+        width: 100%;
+    }
+
+    .zoom-group {
+        justify-content: center;
+    }
+
+    .debug-group {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    #searchInput {
+        font-size: 16px; /* Prevent zoom on iOS */
+        min-height: 44px;
+    }
+
+    button {
+        font-size: 16px;
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+
+    .zoom-btn {
+        min-width: 50px;
+        height: 50px;
+    }
+
+    #locationInfo {
+        left: 15px;
+        right: 15px;
+        bottom: 15px;
+        max-width: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .controls-panel {
+        left: 60px;
+        right: 10px;
+    }
+
+    .control-group {
+        padding: 8px;
+    }
+
+    .zoom-group {
+        flex-wrap: wrap;
+        justify-content: space-between;
+    }
+
+    .debug-group {
+        gap: 6px;
+    }
+
+    .debug-btn, .debug-mode-btn {
+        font-size: 12px;
+        padding: 8px 12px;
+    }
+}
+
+/* Performance optimizations */
+.map-tile {
+    backface-visibility: hidden;
+    transform: translateZ(0);
+}
+
+#mapGrid {
+    backface-visibility: hidden;
+    transform: translateZ(0);
+}
+
+/* Smooth scrolling for touch devices */
+#mapCanvas {
+    -webkit-overflow-scrolling: touch;
+    touch-action: none;
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+    .controls-panel {
+        transform: translateX(-120%);
+        opacity: 0;
+        pointer-events: none;
+    }
+    
+    button:hover {
+        transform: none;
+        box-shadow: none;
+    }
+    
+    button:active {
+        transform: scale(0.95);
+        background: rgba(255, 255, 255, 0.1);
+    }
+}
+
+/* Hide scrollbars */
+::-webkit-scrollbar {
+    display: none;
+}
+
+/* Animation keyframes */
+@keyframes fadeIn {
+    from { 
+        opacity: 0; 
+        transform: translateY(10px);
+    }
+    to { 
+        opacity: 1; 
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInLeft {
+    from {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-out;
+}
+
+.slide-in-left {
+    animation: slideInLeft 0.3s ease-out;
+}
+
+/* Pulse animation for toggle button when controls are available */
+.toggle-btn.has-content {
+    animation: pulse 2s infinite;
+}
+
+/* Page load animations */
+body {
+    animation: fadeIn 0.3s ease-out;
+}
+
+.toggle-btn {
+    animation: slideInLeft 0.5s ease-out 0.2s both;
+}
