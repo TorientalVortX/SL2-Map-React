@@ -428,10 +428,11 @@ export default class GameMap {
     }
 
     createWorldMapElement() {
-        this.worldMapElements = {};
+        this.worldMapElements = null;
         this.currentWorldMapLevel = null;
+        this.worldMapLoadingStates = null;
         this.worldMapElement = document.createElement('img');
-        this.worldMapElement.className = 'world-map-image world-map-fallback';
+        this.worldMapElement.className = 'world-map-image world-map-single';
         this.worldMapElement.src = this.config.worldMapPath;
         const totalMapWidth = this.config.gridWidth * this.config.tileSize;
         const totalMapHeight = this.config.gridHeight * this.config.tileSize;
@@ -439,31 +440,6 @@ export default class GameMap {
         this.mapGrid.appendChild(this.worldMapElement);
         this.worldMapElement.onload = () => {};
         this.worldMapElement.onerror = () => {};
-        if (this.config.worldMaps) {
-            this.worldMapLoadingStates = {};
-            Object.entries(this.config.worldMaps).forEach(([level, worldMapConfig], index) => {
-                const element = document.createElement('img');
-                element.className = `world-map-image world-map-${level}`;
-                this.worldMapLoadingStates[level] = 'loading';
-                const totalMapWidth = this.config.gridWidth * this.config.tileSize;
-                const totalMapHeight = this.config.gridHeight * this.config.tileSize;
-                const zIndex = 15 + index;
-                element.style.cssText = `position:absolute;top:0;left:0;width:${totalMapWidth}px;height:${totalMapHeight}px;object-fit:cover;object-position:center;opacity:0;transition:opacity 0.3s ease;pointer-events:none;z-index:${zIndex};image-rendering:auto;`;
-                element.onload = () => { this.worldMapLoadingStates[level] = 'loaded'; };
-                element.onerror = () => {
-                    this.worldMapLoadingStates[level] = 'error';
-                    setTimeout(() => {
-                        if (this.worldMapLoadingStates[level] === 'error') {
-                            this.worldMapLoadingStates[level] = 'loading';
-                            element.src = worldMapConfig.path;
-                        }
-                    }, 2000);
-                };
-                this.worldMapElements[level] = element;
-                this.mapGrid.appendChild(element);
-                element.src = worldMapConfig.path;
-            });
-        }
     }
 
     getTilePosition(row, col) {
@@ -873,19 +849,7 @@ export default class GameMap {
 
     getWorldMapStats() { return {}; }
     getWorldMapLoadingStatus() { return this.worldMapLoadingStates; }
-    reloadFailedWorldMaps() {
-        if (!this.worldMapLoadingStates) return;
-        Object.entries(this.worldMapLoadingStates).forEach(([level, state]) => {
-            if (state === 'error') {
-                const element = this.worldMapElements[level];
-                const config = this.config.worldMaps[level];
-                if (element && config) {
-                    this.worldMapLoadingStates[level] = 'loading';
-                    element.src = config.path;
-                }
-            }
-        });
-    }
+    reloadFailedWorldMaps() { /* no-op: using single world map */ }
 
     debugWorldMapVisibility() {}
     updateWorldMapImage(imagePath) { this.config.worldMapPath = imagePath; this.worldMapElement.src = imagePath; }
@@ -1087,41 +1051,16 @@ export default class GameMap {
     updateMapView() {
         const shouldShowWorldMap = this.zoom < this.config.worldMapThreshold;
         if (shouldShowWorldMap) {
-            let bestLevel = 'small';
-            let bestElement = null;
-            if (this.worldMapElements && Object.keys(this.worldMapElements).length > 0) {
-                const levels = Object.entries(this.config.worldMaps).sort((a, b) => b[1].threshold - a[1].threshold);
-                for (const [level, config] of levels) {
-                    const element = this.worldMapElements[level];
-                    const isLoaded = this.worldMapLoadingStates && this.worldMapLoadingStates[level] === 'loaded';
-                    const isElementReady = element && element.complete && element.naturalWidth > 0;
-                    if (this.zoom >= config.threshold && element && (isLoaded || isElementReady)) { bestLevel = level; bestElement = element; break; }
-                }
-                if (!bestElement) {
-                    for (const [level, config] of levels) {
-                        const element = this.worldMapElements[level];
-                        const isLoaded = this.worldMapLoadingStates && this.worldMapLoadingStates[level] === 'loaded';
-                        const isElementReady = element && element.complete && element.naturalWidth > 0;
-                        if (element && (isLoaded || isElementReady)) { bestLevel = level; bestElement = element; break; }
-                    }
-                }
-                if (!bestElement) {
-                    const smallestLevel = Object.entries(this.config.worldMaps).sort((a, b) => a[1].threshold - b[1].threshold)[0];
-                    if (smallestLevel && this.worldMapElements[smallestLevel[0]]) { bestLevel = smallestLevel[0]; bestElement = this.worldMapElements[smallestLevel[0]]; }
-                }
-            }
-            if (!bestElement && this.worldMapElement) { bestElement = this.worldMapElement; bestLevel = 'fallback'; }
-            if (!bestElement) { return; }
-            if (!this.isWorldMapView || this.currentWorldMapLevel !== bestLevel) {
+            if (!this.isWorldMapView) {
                 const rect = this.mapCanvas.getBoundingClientRect();
                 const viewCenterX = (rect.width / 2 - this.offsetX) / this.zoom;
                 const viewCenterY = (rect.height / 2 - this.offsetY) / this.zoom;
                 this.isWorldMapView = true;
-                if (this.worldMapElements) { Object.values(this.worldMapElements).forEach(element => { element.style.opacity = '0'; element.style.pointerEvents = 'none'; }); }
-                if (this.worldMapElement) { this.worldMapElement.style.opacity = '0'; this.worldMapElement.style.pointerEvents = 'none'; }
-                bestElement.style.opacity = '1';
-                bestElement.style.pointerEvents = 'auto';
-                this.currentWorldMapLevel = bestLevel;
+                if (this.worldMapElement) {
+                    this.worldMapElement.style.opacity = '1';
+                    this.worldMapElement.style.pointerEvents = 'auto';
+                }
+                this.currentWorldMapLevel = null;
                 this.offsetX = rect.width / 2 - (viewCenterX * this.zoom);
                 this.offsetY = rect.height / 2 - (viewCenterY * this.zoom);
                 const transform = `translate(${this.offsetX}px, ${this.offsetY}px) scale(${this.zoom})`;
@@ -1132,8 +1071,10 @@ export default class GameMap {
         } else if (this.isWorldMapView) {
             this.isWorldMapView = false;
             this.currentWorldMapLevel = null;
-            if (this.worldMapElements) { Object.values(this.worldMapElements).forEach(element => { element.style.opacity = '0'; element.style.pointerEvents = 'none'; }); }
-            if (this.worldMapElement) { this.worldMapElement.style.opacity = '0'; this.worldMapElement.style.pointerEvents = 'none'; }
+            if (this.worldMapElement) {
+                this.worldMapElement.style.opacity = '0';
+                this.worldMapElement.style.pointerEvents = 'none';
+            }
             document.querySelectorAll('.map-tile.loaded').forEach(tile => { tile.style.opacity = '1'; });
             setTimeout(() => { this.updateVisibleTiles(); }, 100);
         }
