@@ -71,6 +71,7 @@ export default class GameMap {
         this.throttleTiming = this.calculateOptimalThrottleTiming();
         this.throttledUpdateTiles = this.throttle(() => this.updateVisibleTiles(), this.throttleTiming);
         this.lastZoom = null;
+        this.tilesHidden = false;
         this.cacheWarmup = {
             enabled: true,
             limit: 300,
@@ -355,6 +356,18 @@ export default class GameMap {
         this.searchInput = document.getElementById('searchInput');
         this.locationInfo = document.getElementById('locationInfo');
         this.loadingIndicator = document.getElementById('loadingIndicator');
+
+        // Rendering/compositing hints to reduce flicker during transforms
+        if (this.mapGrid) {
+            this.mapGrid.style.willChange = 'transform';
+            this.mapGrid.style.backfaceVisibility = 'hidden';
+            this.mapGrid.style.transformStyle = 'flat';
+        }
+        if (this.pinLayer) {
+            this.pinLayer.style.willChange = 'transform';
+            this.pinLayer.style.backfaceVisibility = 'hidden';
+            this.pinLayer.style.transformStyle = 'flat';
+        }
     }
 
     setupEventListeners() {
@@ -435,9 +448,18 @@ export default class GameMap {
         this.worldMapElement = document.createElement('img');
         this.worldMapElement.className = 'world-map-image world-map-single';
         this.worldMapElement.src = this.config.worldMapPath;
+
         const totalMapWidth = this.config.gridWidth * this.config.tileSize;
         const totalMapHeight = this.config.gridHeight * this.config.tileSize;
-        this.worldMapElement.style.cssText = `position:absolute;top:0;left:0;width:${totalMapWidth}px;height:${totalMapHeight}px;object-fit:cover;object-position:center;opacity:0;transition:opacity 0.3s ease;pointer-events:none;z-index:10;image-rendering:auto;`;
+        const naturalWidth = this.config.worldMapSize?.width || totalMapWidth;
+        const naturalHeight = this.config.worldMapSize?.height || totalMapHeight;
+        const scaleX = totalMapWidth / naturalWidth;
+        const scaleY = totalMapHeight / naturalHeight;
+
+        this.worldMapElement.style.cssText = `position:absolute;top:0;left:0;width:${naturalWidth}px;height:${naturalHeight}px;opacity:0;pointer-events:none;z-index:10;image-rendering:auto;will-change:transform,opacity;transform-origin:top left;`;
+        // Pre-scale the image to map coordinate space to avoid huge layout sizes
+        this.worldMapElement.style.transform = `scale(${scaleX}, ${scaleY})`;
+
         this.mapGrid.appendChild(this.worldMapElement);
         this.worldMapElement.onload = () => {};
         this.worldMapElement.onerror = () => {};
@@ -1070,7 +1092,10 @@ export default class GameMap {
                 const transform = `translate(${this.offsetX}px, ${this.offsetY}px) scale(${this.zoom})`;
                 this.mapGrid.style.transform = transform;
                 this.pinLayer.style.transform = transform;
-                document.querySelectorAll('.map-tile').forEach(tile => { tile.style.opacity = '0'; });
+                if (!this.tilesHidden) {
+                    document.querySelectorAll('.map-tile').forEach(tile => { tile.style.opacity = '0'; });
+                    this.tilesHidden = true;
+                }
             }
         } else if (this.isWorldMapView) {
             this.isWorldMapView = false;
@@ -1079,7 +1104,10 @@ export default class GameMap {
                 this.worldMapElement.style.opacity = '0';
                 this.worldMapElement.style.pointerEvents = 'none';
             }
-            document.querySelectorAll('.map-tile.loaded').forEach(tile => { tile.style.opacity = '1'; });
+            if (this.tilesHidden) {
+                document.querySelectorAll('.map-tile.loaded').forEach(tile => { tile.style.opacity = '1'; });
+                this.tilesHidden = false;
+            }
             setTimeout(() => { this.updateVisibleTiles(); }, 100);
         }
     }
