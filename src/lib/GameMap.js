@@ -70,6 +70,7 @@ export default class GameMap {
         this.devicePerformance = this.detectDevicePerformance();
         this.throttleTiming = this.calculateOptimalThrottleTiming();
         this.throttledUpdateTiles = this.throttle(() => this.updateVisibleTiles(), this.throttleTiming);
+        this.lastZoom = null;
         this.cacheWarmup = {
             enabled: true,
             limit: 300,
@@ -964,7 +965,10 @@ export default class GameMap {
         const transform = `translate(${this.offsetX}px, ${this.offsetY}px) scale(${this.zoom})`;
         this.mapGrid.style.transform = transform;
         this.pinLayer.style.transform = transform;
-        this.updateMapView();
+        if (this.lastZoom === null || this.zoom !== this.lastZoom) {
+            this.updateMapView();
+            this.lastZoom = this.zoom;
+        }
         if (this.isWorldMapView) return;
         if (this.isDragging) this.throttledUpdateTiles();
         else this.updateVisibleTiles();
