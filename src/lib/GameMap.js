@@ -1,4 +1,4 @@
-import { getVisibleTileRange, zoomAroundPoint } from './mapMath.js';
+import { constrainMapOffsets, getVisibleTileRange, isMapPointInViewport, zoomAroundPoint } from './mapMath.js';
 
 export default class GameMap {
     // Performance optimization methods
@@ -70,6 +70,9 @@ export default class GameMap {
         this.worldMapElement = null;
         this.loadedTiles = new Map();
         this.tileElements = new Map();
+        this.pinElements = new Map();
+        this.selectedLocationId = null;
+        this.locationReturnFocus = null;
         this.visibleTiles = new Set();
         this.pendingUnloads = new Map();
         this.tileUnloadDelay = 750;
@@ -83,6 +86,10 @@ export default class GameMap {
         this.eventCleanups = [];
         this.destroyed = false;
         this.performanceFrameId = null;
+        this.resizeFrameId = null;
+        this.focusFrameId = null;
+        this.viewportWidth = 0;
+        this.viewportHeight = 0;
         this.devicePerformance = this.detectDevicePerformance();
         this.throttleTiming = this.calculateOptimalThrottleTiming();
         this.throttledUpdateTiles = this.throttle(() => this.updateVisibleTiles(), this.throttleTiming);
@@ -381,6 +388,14 @@ export default class GameMap {
             this.pinLayer.style.backfaceVisibility = 'hidden';
             this.pinLayer.style.transformStyle = 'flat';
         }
+        this.getCanvasRect();
+    }
+
+    getCanvasRect() {
+        const rect = this.mapCanvas.getBoundingClientRect();
+        this.viewportWidth = rect.width;
+        this.viewportHeight = rect.height;
+        return rect;
     }
 
     listen(target, type, handler, options) {
@@ -390,7 +405,7 @@ export default class GameMap {
     }
 
     setupEventListeners() {
-        this.listen(document.getElementById('toggleControls'), 'click', () => this.toggleControls());
+        this.listen(document.getElementById('toggleControls'), 'click', (event) => this.toggleControls(event.detail === 0));
         this.listen(document.getElementById('zoomIn'), 'click', () => this.zoomIn());
         this.listen(document.getElementById('zoomOut'), 'click', () => this.zoomOut());
         this.listen(document.getElementById('resetView'), 'click', () => this.resetView());
@@ -415,7 +430,7 @@ export default class GameMap {
         });
         this.listen(document.getElementById('searchBtn'), 'click', () => this.search());
         this.listen(this.searchInput, 'keydown', (e) => { if (e.key === 'Enter') this.search(); });
-        this.listen(document.getElementById('closeInfo'), 'click', () => this.hideLocationInfo());
+        this.listen(document.getElementById('closeInfo'), 'click', () => this.hideLocationInfo(true));
         this.listen(this.mapCanvas, 'mousedown', (e) => this.startDrag(e));
         this.listen(this.mapCanvas, 'mousemove', (e) => this.drag(e));
         this.listen(this.mapCanvas, 'mouseup', () => this.endDrag());
@@ -506,7 +521,7 @@ export default class GameMap {
 
     updateVisibleTiles() {
         if (this.destroyed || this.isWorldMapView) return;
-        const canvas = this.mapCanvas.getBoundingClientRect();
+        const canvas = this.getCanvasRect();
         const canvasWidth = canvas.width;
         const canvasHeight = canvas.height;
         const leftBound = -this.offsetX / this.zoom;
@@ -752,39 +767,43 @@ export default class GameMap {
         }
     }
 
-    toggleControls() {
-        this.controlsVisible = !this.controlsVisible;
-        const controlsPanel = document.getElementById('mapControls');
-        const toggleButton = document.getElementById('toggleControls');
-        if (this.controlsVisible) {
-            controlsPanel.classList.add('visible');
-            toggleButton.classList.add('active');
-            toggleButton.setAttribute('aria-expanded', 'true');
-            toggleButton.setAttribute('aria-label', 'Close map controls');
-        } else {
-            controlsPanel.classList.remove('visible');
-            toggleButton.classList.remove('active');
-            toggleButton.setAttribute('aria-expanded', 'false');
-            toggleButton.setAttribute('aria-label', 'Open map controls');
-        }
+    toggleControls(focusPanel = false) {
+        if (this.controlsVisible) this.hideControls(true);
+        else this.showControls(focusPanel);
     }
 
-    showControls() {
+    scheduleFocus(element) {
+        if (this.focusFrameId !== null) cancelAnimationFrame(this.focusFrameId);
+        this.focusFrameId = requestAnimationFrame(() => {
+            this.focusFrameId = null;
+            if (!this.destroyed && element?.isConnected) element.focus({ preventScroll: true });
+        });
+    }
+
+    showControls(focusPanel = false) {
         this.controlsVisible = true;
-        document.getElementById('mapControls').classList.add('visible');
+        const controlsPanel = document.getElementById('mapControls');
+        controlsPanel.classList.add('visible');
+        controlsPanel.setAttribute('aria-hidden', 'false');
+        this.mapContainer.classList.add('controls-open');
         const toggleButton = document.getElementById('toggleControls');
         toggleButton.classList.add('active');
         toggleButton.setAttribute('aria-expanded', 'true');
         toggleButton.setAttribute('aria-label', 'Close map controls');
+        if (focusPanel) this.scheduleFocus(this.searchInput);
     }
 
-    hideControls() {
+    hideControls(restoreFocus = false) {
         this.controlsVisible = false;
-        document.getElementById('mapControls').classList.remove('visible');
+        const controlsPanel = document.getElementById('mapControls');
+        controlsPanel.classList.remove('visible');
+        controlsPanel.setAttribute('aria-hidden', 'true');
+        this.mapContainer.classList.remove('controls-open');
         const toggleButton = document.getElementById('toggleControls');
         toggleButton.classList.remove('active');
         toggleButton.setAttribute('aria-expanded', 'false');
         toggleButton.setAttribute('aria-label', 'Open map controls');
+        if (restoreFocus && controlsPanel.contains(document.activeElement)) this.scheduleFocus(toggleButton);
     }
 
     handleTouchStart(e) {
@@ -835,7 +854,7 @@ export default class GameMap {
     }
 
     zoomAtPoint(newZoom, clientX, clientY) {
-        const rect = this.mapCanvas.getBoundingClientRect();
+        const rect = this.getCanvasRect();
         const x = clientX - rect.left;
         const y = clientY - rect.top;
         newZoom = Math.max(this.config.minZoom, Math.min(this.config.maxZoom, newZoom));
@@ -855,16 +874,19 @@ export default class GameMap {
 
     handleKeyPress(e) {
         const tagName = e.target.tagName;
-        if (e.target.isContentEditable || ['INPUT', 'TEXTAREA', 'BUTTON', 'SELECT'].includes(tagName)) return;
+        const isTypingTarget = e.target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(tagName);
+        if (e.key === 'Escape') {
+            e.preventDefault?.();
+            this.hideControls(true);
+            this.hideLocationInfo(true);
+            return;
+        }
+        if (isTypingTarget || tagName === 'BUTTON') return;
         const panStep = e.shiftKey ? 240 : 80;
         switch(e.key) {
-            case 'Escape':
-                this.hideControls();
-                this.hideLocationInfo();
-                break;
             case ' ':
                 e.preventDefault();
-                this.toggleControls();
+                this.toggleControls(true);
                 break;
             case '+':
             case '=':
@@ -902,7 +924,7 @@ export default class GameMap {
             case 'h':
             case 'H':
                 if (e.ctrlKey || e.metaKey) return;
-                this.toggleControls();
+                this.toggleControls(true);
                 break;
         }
     }
@@ -1067,6 +1089,7 @@ export default class GameMap {
 
     createPins() {
         this.pinLayer.innerHTML = '';
+        this.pinElements.clear();
         this.locations.forEach(location => {
             const pin = document.createElement('button');
             pin.type = 'button';
@@ -1074,17 +1097,55 @@ export default class GameMap {
             pin.style.left = location.x + 'px';
             pin.style.top = location.y + 'px';
             pin.dataset.locationId = location.id;
+            pin.dataset.waypointName = location.name;
             pin.setAttribute('aria-label', location.name);
+            pin.setAttribute('aria-controls', 'locationInfo');
+            pin.setAttribute('aria-expanded', 'false');
             pin.title = location.name;
             pin.addEventListener('click', (e) => { e.stopPropagation(); this.showLocationInfo(location); });
+            this.pinElements.set(String(location.id), pin);
             this.pinLayer.appendChild(pin);
         });
     }
 
+    updatePinTabOrder() {
+        this.locations.forEach((location) => {
+            const pin = this.pinElements.get(String(location.id));
+            if (!pin) return;
+            const isInViewport = isMapPointInViewport({
+                x: location.x,
+                y: location.y,
+                offsetX: this.offsetX,
+                offsetY: this.offsetY,
+                zoom: this.zoom,
+                viewportWidth: this.viewportWidth,
+                viewportHeight: this.viewportHeight,
+                padding: 24,
+            });
+            const nextState = isInViewport ? 'true' : 'false';
+            if (pin.dataset.inViewport === nextState) return;
+            pin.dataset.inViewport = nextState;
+            pin.tabIndex = isInViewport ? 0 : -1;
+            pin.setAttribute('aria-hidden', isInViewport ? 'false' : 'true');
+        });
+    }
+
     updateTransform() {
+        const constrained = constrainMapOffsets({
+            offsetX: this.offsetX,
+            offsetY: this.offsetY,
+            zoom: this.zoom,
+            viewportWidth: this.viewportWidth,
+            viewportHeight: this.viewportHeight,
+            mapWidth: this.config.gridWidth * this.config.tileSize,
+            mapHeight: this.config.gridHeight * this.config.tileSize,
+        });
+        this.offsetX = constrained.offsetX;
+        this.offsetY = constrained.offsetY;
         const transform = `translate(${this.offsetX}px, ${this.offsetY}px) scale(${this.zoom})`;
         this.mapGrid.style.transform = transform;
         this.pinLayer.style.transform = transform;
+        this.updatePinTabOrder();
         if (this.lastZoom === null || this.zoom !== this.lastZoom) {
             this.updateMapView();
             this.lastZoom = this.zoom;
@@ -1190,7 +1251,7 @@ export default class GameMap {
         if (shouldShowWorldMap) {
             this.updateWorldMapSource();
             if (!this.isWorldMapView) {
-                const rect = this.mapCanvas.getBoundingClientRect();
+                const rect = this.getCanvasRect();
                 const viewCenterX = (rect.width / 2 - this.offsetX) / this.zoom;
                 const viewCenterY = (rect.height / 2 - this.offsetY) / this.zoom;
                 this.isWorldMapView = true;
@@ -1256,7 +1317,7 @@ export default class GameMap {
     handleMapClick(e) {
         if (!this.debugMode || this.isDragging) return;
         if (e.target.classList.contains('map-pin')) return;
-        const rect = this.mapCanvas.getBoundingClientRect();
+        const rect = this.getCanvasRect();
         const clickX = e.clientX - rect.left;
         const clickY = e.clientY - rect.top;
         const mapX = (clickX - this.offsetX) / this.zoom;
@@ -1317,7 +1378,7 @@ export default class GameMap {
         const delta = e.deltaY > 0 ? (1 / zoomFactor) : zoomFactor;
         const newZoom = Math.max(this.config.minZoom, Math.min(this.config.maxZoom, this.zoom * delta));
         if (newZoom !== this.zoom) {
-            const rect = this.mapCanvas.getBoundingClientRect();
+            const rect = this.getCanvasRect();
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
             const offsets = zoomAroundPoint({
@@ -1338,7 +1399,7 @@ export default class GameMap {
     zoomIn() { const zoomFactor = 1.2; const newZoom = Math.min(this.config.maxZoom, this.zoom * zoomFactor); this.zoomToLevel(newZoom); }
     zoomOut() { const zoomFactor = 1.2; const newZoom = Math.max(this.config.minZoom, this.zoom / zoomFactor); this.zoomToLevel(newZoom); }
     zoomToLevel(newZoom) {
-        const rect = this.mapCanvas.getBoundingClientRect();
+        const rect = this.getCanvasRect();
         const centerX = rect.width / 2;
         const centerY = rect.height / 2;
         const offsets = zoomAroundPoint({
@@ -1357,7 +1418,7 @@ export default class GameMap {
 
     resetView() { this.zoom = this.config.initialZoom; this.clearPendingUnloads(); this.centerMap(); }
     centerMap() {
-        const rect = this.mapCanvas.getBoundingClientRect();
+        const rect = this.getCanvasRect();
         const mapWidth = this.config.gridWidth * this.config.tileSize * this.zoom;
         const mapHeight = this.config.gridHeight * this.config.tileSize * this.zoom;
         this.offsetX = (rect.width - mapWidth) / 2;
@@ -1384,7 +1445,7 @@ export default class GameMap {
     }
 
     panToLocation(location) {
-        const rect = this.mapCanvas.getBoundingClientRect();
+        const rect = this.getCanvasRect();
         const targetX = location.x * this.zoom;
         const targetY = location.y * this.zoom;
         this.offsetX = rect.width / 2 - targetX;
@@ -1393,14 +1454,49 @@ export default class GameMap {
     }
 
     showLocationInfo(location) {
-        document.getElementById('locationName').textContent = location.name;
+        if (!this.locationInfo.classList.contains('hidden') && this.selectedLocationId !== location.id) {
+            this.pinElements.get(String(this.selectedLocationId))?.setAttribute('aria-expanded', 'false');
+            this.pinElements.get(String(this.selectedLocationId))?.classList.remove('selected');
+        }
+        if (this.locationInfo.classList.contains('hidden')) this.locationReturnFocus = document.activeElement;
+        this.selectedLocationId = location.id;
+        const selectedPin = this.pinElements.get(String(location.id));
+        selectedPin?.setAttribute('aria-expanded', 'true');
+        selectedPin?.classList.add('selected');
+        const heading = document.getElementById('locationName');
+        heading.textContent = location.name;
         document.getElementById('locationDescription').textContent = location.description;
         this.locationInfo.classList.remove('hidden');
+        this.locationInfo.setAttribute('aria-hidden', 'false');
+        this.scheduleFocus(heading);
     }
 
-    hideLocationInfo() { this.locationInfo.classList.add('hidden'); }
+    hideLocationInfo(restoreFocus = false) {
+        this.locationInfo.classList.add('hidden');
+        this.locationInfo.setAttribute('aria-hidden', 'true');
+        const selectedPin = this.pinElements.get(String(this.selectedLocationId));
+        selectedPin?.setAttribute('aria-expanded', 'false');
+        selectedPin?.classList.remove('selected');
+        this.selectedLocationId = null;
+        if (restoreFocus && this.locationReturnFocus?.isConnected) {
+            const controlsPanel = document.getElementById('mapControls');
+            const focusTarget = !this.controlsVisible && controlsPanel.contains(this.locationReturnFocus)
+                ? document.getElementById('toggleControls')
+                : this.locationReturnFocus;
+            this.scheduleFocus(focusTarget);
+        }
+        this.locationReturnFocus = null;
+    }
 
-    handleResize() { requestAnimationFrame(() => { this.updateVisibleTiles(); }); }
+    handleResize() {
+        if (this.resizeFrameId !== null) cancelAnimationFrame(this.resizeFrameId);
+        this.resizeFrameId = requestAnimationFrame(() => {
+            this.resizeFrameId = null;
+            if (this.destroyed) return;
+            this.getCanvasRect();
+            this.updateTransform();
+        });
+    }
 
     init() {
         this.setupElements();
@@ -1426,11 +1522,20 @@ export default class GameMap {
             cancelAnimationFrame(this.performanceFrameId);
             this.performanceFrameId = null;
         }
+        if (this.resizeFrameId !== null) {
+            cancelAnimationFrame(this.resizeFrameId);
+            this.resizeFrameId = null;
+        }
+        if (this.focusFrameId !== null) {
+            cancelAnimationFrame(this.focusFrameId);
+            this.focusFrameId = null;
+        }
         if (this.worldMapElement) {
             this.worldMapElement.onload = null;
             this.worldMapElement.onerror = null;
         }
         this.tileElements.clear();
+        this.pinElements.clear();
         this.loadedTiles.clear();
         this.visibleTiles.clear();
         this.mapGrid?.replaceChildren();

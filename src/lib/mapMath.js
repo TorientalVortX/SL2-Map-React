@@ -41,3 +41,46 @@ export function zoomAroundPoint({ zoom, newZoom, offsetX, offsetY, pointX, point
     offsetY: pointY - worldY * newZoom,
   }
 }
+
+export function constrainMapOffsets({
+  offsetX,
+  offsetY,
+  zoom,
+  viewportWidth,
+  viewportHeight,
+  mapWidth,
+  mapHeight,
+}) {
+  const scaledWidth = Math.max(0, mapWidth) * Math.max(0, zoom)
+  const scaledHeight = Math.max(0, mapHeight) * Math.max(0, zoom)
+
+  const constrainAxis = (offset, viewportSize, contentSize) => {
+    if (contentSize <= viewportSize) return (viewportSize - contentSize) / 2
+    return clamp(offset, viewportSize - contentSize, 0)
+  }
+
+  return {
+    offsetX: constrainAxis(offsetX, Math.max(0, viewportWidth), scaledWidth),
+    offsetY: constrainAxis(offsetY, Math.max(0, viewportHeight), scaledHeight),
+  }
+}
+
+export function isMapPointInViewport({
+  x,
+  y,
+  offsetX,
+  offsetY,
+  zoom,
+  viewportWidth,
+  viewportHeight,
+  padding = 0,
+}) {
+  const screenX = offsetX + x * zoom
+  const screenY = offsetY + y * zoom
+  const safePadding = Math.max(0, padding)
+
+  return screenX >= -safePadding
+    && screenX <= viewportWidth + safePadding
+    && screenY >= -safePadding
+    && screenY <= viewportHeight + safePadding
+}
