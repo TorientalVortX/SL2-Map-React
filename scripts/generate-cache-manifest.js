@@ -65,8 +65,11 @@ function main() {
   };
 
   const outFile = path.join(publicDir, 'cache-manifest.json');
+  const versionFile = path.join(publicDir, 'cache-version.json');
   fs.writeFileSync(outFile, JSON.stringify(manifest, null, 2));
+  fs.writeFileSync(versionFile, JSON.stringify({ version, generatedAt: manifest.generatedAt }, null, 2));
   console.log(`Wrote ${outFile}`);
+  console.log(`Wrote ${versionFile}`);
   console.log(`Total files: ${entries.length}`);
   console.log(`Total size: ${(totalBytes / (1024 * 1024)).toFixed(2)} MB`);
 }
