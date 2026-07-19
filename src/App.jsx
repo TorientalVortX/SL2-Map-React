@@ -1,54 +1,51 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-
-// We'll instantiate GameMap on mount once we add it
-let GameMapClass
+import GameMap from './lib/GameMap.js'
 
 export default function App() {
-  const [readyForMap, setReadyForMap] = useState(false)
   const [showPreloadModal, setShowPreloadModal] = useState(false)
   const [manifest, setManifest] = useState(null)
-  const [preloadState, setPreloadState] = useState({ running: false, completed: 0, total: 0 })
+  const [cacheCurrent, setCacheCurrent] = useState(false)
+  const [preloadState, setPreloadState] = useState({ running: false, completed: 0, total: 0, failed: 0, error: '' })
   const confirmedRef = useRef(false)
+  const manifestAbortRef = useRef(null)
 
-  // Instantiate GameMap only when ready
-  useEffect(() => {
-    if (!readyForMap) return
-    (async () => {
-      if (!GameMapClass) {
-        const mod = await import('./lib/GameMap.js')
-        GameMapClass = mod.default || mod.GameMap || mod
+  const loadManifest = async () => {
+    if (manifest) return manifest
+    manifestAbortRef.current?.abort()
+    const controller = new AbortController()
+    manifestAbortRef.current = controller
+    try {
+      const response = await fetch('/cache-manifest.json', { cache: 'no-cache', signal: controller.signal })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const nextManifest = await response.json()
+      setManifest(nextManifest)
+      setCacheCurrent(localStorage.getItem('sl2-cache-version') === nextManifest.version)
+      return nextManifest
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        setPreloadState((state) => ({ ...state, error: 'Offline download details are unavailable. The online map is unaffected.' }))
       }
-      window.gameMap = new GameMapClass()
-    })()
-  }, [readyForMap])
+      return null
+    }
+  }
 
-  // Check manifest and cache version on first mount
+  const openPreload = () => {
+    setShowPreloadModal(true)
+    void loadManifest()
+  }
+
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch('/cache-manifest.json', { cache: 'no-cache' })
-        if (!res.ok) {
-          setReadyForMap(true) // no manifest; proceed normally
-          return
-        }
-        const man = await res.json()
-        setManifest(man)
-        const stored = localStorage.getItem('sl2-cache-version')
-        const preloadParam = new URLSearchParams(location.search).get('preload')
-        if (preloadParam === '1') {
-          setShowPreloadModal(true)
-          return
-        }
-        if (stored === man.version) {
-          setReadyForMap(true)
-          return
-        }
-        // Show prompt to preload
-        setShowPreloadModal(true)
-      } catch (e) {
-        setReadyForMap(true)
-      }
-    })()
+    const map = new GameMap()
+    window.gameMap = map
+    return () => {
+      map.destroy()
+      manifestAbortRef.current?.abort()
+      if (window.gameMap === map) delete window.gameMap
+    }
+  }, [])
+
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get('preload') === '1') openPreload()
   }, [])
 
   // Listen to SW progress events
@@ -58,19 +55,17 @@ export default function App() {
     const handler = (evt) => {
       const msg = evt.data || {}
       if (msg.type === 'PRECACHE_START') {
-        setPreloadState({ running: true, completed: 0, total: msg.total || 0 })
+        setPreloadState({ running: true, completed: 0, total: msg.total || 0, failed: 0, error: '' })
       } else if (msg.type === 'PRECACHE_PROGRESS') {
-        setPreloadState((s) => ({ running: true, completed: msg.completed || s.completed, total: msg.total || s.total }))
+        setPreloadState((s) => ({ ...s, running: true, completed: msg.completed ?? s.completed, total: msg.total ?? s.total, failed: msg.failed ?? s.failed }))
       } else if (msg.type === 'PRECACHE_DONE') {
-        setPreloadState((s) => ({ ...s, completed: s.total }))
-        if (manifest && !confirmedRef.current) {
-          // ensure finalization only once
+        const failed = msg.failed || 0
+        setPreloadState((s) => ({ ...s, running: false, completed: msg.completed ?? s.total, failed, error: failed ? `${failed} files could not be cached. You can retry.` : '' }))
+        if (manifest && failed === 0 && !confirmedRef.current) {
           confirmedRef.current = true
           localStorage.setItem('sl2-cache-version', manifest.version)
-          setTimeout(() => {
-            setShowPreloadModal(false)
-            setReadyForMap(true)
-          }, 300)
+          setCacheCurrent(true)
+          setShowPreloadModal(false)
         }
       }
     }
@@ -82,40 +77,50 @@ export default function App() {
 
   const startPreload = async () => {
     if (!manifest) return
+    if (!('serviceWorker' in navigator)) {
+      setPreloadState((s) => ({ ...s, error: 'Offline caching is not supported by this browser.' }))
+      return
+    }
     confirmedRef.current = false
-    setPreloadState({ running: true, completed: 0, total: manifest.tiles.length + manifest.worldMaps.length + manifest.others.length })
+    setPreloadState({ running: true, completed: 0, total: manifest.tiles.length + manifest.worldMaps.length + manifest.others.length, failed: 0, error: '' })
     const urls = [...manifest.worldMaps, ...manifest.tiles, ...manifest.others].map(e => e.url)
     try {
       const reg = await navigator.serviceWorker.ready
       if (reg.active) {
-        reg.active.postMessage({ type: 'PRECACHE_TILES', urls, limit: urls.length, concurrency: 8 })
+        reg.active.postMessage({ type: 'PRECACHE_TILES', urls, version: manifest.version, concurrency: 4 })
+      } else {
+        throw new Error('Service worker is not active')
       }
-    } catch {}
+    } catch {
+      setPreloadState((s) => ({ ...s, running: false, error: 'Offline preload could not start. The map remains available online.' }))
+    }
   }
 
   const skipPreload = () => {
     setShowPreloadModal(false)
-    setReadyForMap(true)
+    setPreloadState({ running: false, completed: 0, total: 0, failed: 0, error: '' })
   }
 
   return (
     <div id="mapContainer">
       {showPreloadModal && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h2>Preload Map for Offline/Low-Data</h2>
+        <div className="modal-overlay" role="presentation">
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="preloadTitle" aria-describedby="preloadDescription">
+            <h2 id="preloadTitle">Preload Map for Offline/Low-Data</h2>
             {manifest && !preloadState.running && (
-              <p>This will cache approximately <b>{totalMB} MB</b> ({manifest.totalFiles} files) for faster future visits. Proceed?</p>
+              <p id="preloadDescription">{cacheCurrent ? 'This map version is already cached. ' : ''}Downloading will store approximately <b>{totalMB} MB</b> ({manifest.totalFiles} files) on this device.</p>
             )}
+            {!manifest && <p id="preloadDescription">Preparing the offline download details…</p>}
+            {preloadState.error && <p className="error-message" role="alert">{preloadState.error}</p>}
             {!preloadState.running ? (
               <div className="modal-actions">
-                <button onClick={startPreload}>Preload Now</button>
-                <button className="secondary" onClick={skipPreload}>Skip</button>
+                <button onClick={startPreload} disabled={!manifest}>Download for Offline Use</button>
+                <button className="secondary" onClick={skipPreload}>Close</button>
               </div>
             ) : (
               <div className="preload-progress">
                 <div className="spinner" aria-hidden="true"></div>
-                <div className="progress-text">
+                <div className="progress-text" role="status" aria-live="polite">
                   Caching {preloadState.completed} / {preloadState.total}
                 </div>
               </div>
@@ -123,7 +128,7 @@ export default function App() {
           </div>
         </div>
       )}
-      <button id="toggleControls" className="toggle-btn">
+      <button id="toggleControls" className="toggle-btn" aria-label="Open map controls" aria-expanded="false" aria-controls="mapControls">
         <span className="hamburger-icon">
           <span></span>
           <span></span>
@@ -131,8 +136,9 @@ export default function App() {
         </span>
       </button>
 
-      <div id="mapControls" className="controls-panel">
+      <div id="mapControls" className="controls-panel" aria-label="Map controls">
         <div className="control-group search-group">
+          <label className="visually-hidden" htmlFor="searchInput">Search locations</label>
           <input type="text" id="searchInput" placeholder="Search locations..." />
           <button id="searchBtn" className="search-btn" aria-label="Search">
             <svg viewBox="0 0 24 24" width="16" height="16">
@@ -140,6 +146,7 @@ export default function App() {
             </svg>
           </button>
         </div>
+        <div id="searchStatus" className="search-status" role="status" aria-live="polite"></div>
         <div className="control-group zoom-group">
           <button id="zoomIn" className="zoom-btn" aria-label="Zoom In">
             <svg viewBox="0 0 24 24" width="16" height="16">
@@ -157,23 +164,25 @@ export default function App() {
             </svg>
           </button>
         </div>
-        <div className="control-group debug-group">
+        <div className="control-group offline-group">
+          <button id="preloadAll" className="offline-btn" onClick={openPreload}>Offline Map</button>
+        </div>
+        {import.meta.env.DEV && <div className="control-group debug-group">
           <button id="debugWorldMap" className="debug-btn">Debug WM</button>
           <button id="toggleDebug" className="debug-mode-btn">Debug Mode</button>
-          <button id="preloadAll" className="debug-btn" onClick={() => setShowPreloadModal(true)}>Preload Map</button>
-        </div>
+        </div>}
       </div>
 
-      <div id="mapCanvas">
+      <div id="mapCanvas" role="application" aria-label="Interactive SL2 world map" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0" tabIndex="0">
         <div id="mapGrid"></div>
         <div id="pinLayer"></div>
       </div>
 
-      <div id="loadingIndicator">Loading...</div>
+      <div id="loadingIndicator" role="status" aria-live="polite">Loading...</div>
 
-      <div id="locationInfo" className="hidden">
+      <div id="locationInfo" className="hidden" aria-live="polite">
         <div id="locationContent">
-          <button id="closeInfo">&times;</button>
+          <button id="closeInfo" aria-label="Close location details">&times;</button>
           <h3 id="locationName"></h3>
           <p id="locationDescription"></p>
         </div>
