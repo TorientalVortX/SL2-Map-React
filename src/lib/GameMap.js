@@ -1,9 +1,11 @@
+import { getVisibleTileRange, zoomAroundPoint } from './mapMath.js';
+
 export default class GameMap {
     // Performance optimization methods
     throttle(func, limit) {
         let lastFunc;
         let lastRan;
-        return function() {
+        const throttled = function() {
             const context = this;
             const args = arguments;
             if (!lastRan) {
@@ -19,6 +21,11 @@ export default class GameMap {
                 }, limit - (Date.now() - lastRan));
             }
         };
+        throttled.cancel = () => {
+            clearTimeout(lastFunc);
+            lastFunc = null;
+        };
+        return throttled;
     }
 
     constructor() {
@@ -62,22 +69,25 @@ export default class GameMap {
         this.isWorldMapView = false;
         this.worldMapElement = null;
         this.loadedTiles = new Map();
+        this.tileElements = new Map();
         this.visibleTiles = new Set();
         this.pendingUnloads = new Map();
-        this.tileUnloadDelay = 2000;
+        this.tileUnloadDelay = 750;
         this.failedTiles = new Map();
         this.maxRetries = 3;
+        this.tileQueue = [];
+        this.queuedTiles = new Set();
+        this.activeTileLoads = new Map();
+        this.retryTimers = new Map();
+        this.tileRemovalTimers = new Set();
+        this.eventCleanups = [];
+        this.destroyed = false;
+        this.performanceFrameId = null;
         this.devicePerformance = this.detectDevicePerformance();
         this.throttleTiming = this.calculateOptimalThrottleTiming();
         this.throttledUpdateTiles = this.throttle(() => this.updateVisibleTiles(), this.throttleTiming);
         this.lastZoom = null;
         this.tilesHidden = false;
-        this.cacheWarmup = {
-            enabled: true,
-            limit: 300,
-            bufferTiles: 1,
-            concurrency: 8,
-        };
         this.performanceMetrics = {
             lastFrameTime: performance.now(),
             frameCount: 0,
@@ -239,7 +249,8 @@ export default class GameMap {
             let score = 50;
             if (debugInfo) {
                 try {
-                    const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_GL);
+                    const rendererEnum = debugInfo.UNMASKED_RENDERER_WEBGL;
+                    const renderer = typeof rendererEnum === 'number' ? gl.getParameter(rendererEnum) : '';
                     if (renderer && typeof renderer === 'string') {
                         const r = renderer.toLowerCase();
                         if (/rtx 40[0-9]0|rtx 30[0-9]0|rx 7[0-9]00|m1|m2|a1[4-9]/.test(r)) score = 95;
@@ -290,10 +301,12 @@ export default class GameMap {
 
     startPerformanceMonitoring() {
         try {
+            if (this.performanceFrameId !== null) return;
             let frameCount = 0;
             let lastTime = performance.now();
             const monitor = () => {
                 try {
+                    if (this.destroyed) return;
                     const currentTime = performance.now();
                     frameCount++;
                     if (currentTime - lastTime >= 1000) {
@@ -308,24 +321,24 @@ export default class GameMap {
                         frameCount = 0;
                         lastTime = currentTime;
                     }
-                    requestAnimationFrame(monitor);
+                    this.performanceFrameId = requestAnimationFrame(monitor);
                 } catch (e) {
                     console.error('Performance monitoring error:', e);
                 }
             };
-            requestAnimationFrame(monitor);
+            this.performanceFrameId = requestAnimationFrame(monitor);
         } catch (e) {
             console.error('Failed to start performance monitoring:', e);
         }
     }
 
     adaptToPerformance(condition) {
-        const oldTiming = this.throttleTiming;
         if (condition === 'degraded') {
             this.throttleTiming = Math.min(500, this.throttleTiming * 1.5);
         } else if (condition === 'improved') {
             this.throttleTiming = Math.max(50, this.throttleTiming * 0.8);
         }
+        this.throttledUpdateTiles.cancel?.();
         this.throttledUpdateTiles = this.throttle(() => this.updateVisibleTiles(), this.throttleTiming);
     }
 
@@ -370,12 +383,18 @@ export default class GameMap {
         }
     }
 
+    listen(target, type, handler, options) {
+        if (!target) return;
+        target.addEventListener(type, handler, options);
+        this.eventCleanups.push(() => target.removeEventListener(type, handler, options));
+    }
+
     setupEventListeners() {
-        document.getElementById('toggleControls').addEventListener('click', () => this.toggleControls());
-        document.getElementById('zoomIn').addEventListener('click', () => this.zoomIn());
-        document.getElementById('zoomOut').addEventListener('click', () => this.zoomOut());
-        document.getElementById('resetView').addEventListener('click', () => this.resetView());
-        document.getElementById('debugWorldMap').addEventListener('click', () => {
+        this.listen(document.getElementById('toggleControls'), 'click', () => this.toggleControls());
+        this.listen(document.getElementById('zoomIn'), 'click', () => this.zoomIn());
+        this.listen(document.getElementById('zoomOut'), 'click', () => this.zoomOut());
+        this.listen(document.getElementById('resetView'), 'click', () => this.resetView());
+        this.listen(document.getElementById('debugWorldMap'), 'click', () => {
             this.getWorldMapStats();
             this.debugWorldMapVisibility();
             const testZooms = [0.05, 0.15, 0.25, 0.4];
@@ -390,24 +409,25 @@ export default class GameMap {
             };
             testNextZoom();
         });
-        document.getElementById('toggleDebug').addEventListener('click', () => {
+        this.listen(document.getElementById('toggleDebug'), 'click', () => {
             this.toggleDebugMode();
             this.updateDebugButtonState();
         });
-        document.getElementById('searchBtn').addEventListener('click', () => this.search());
-        this.searchInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.search(); });
-        document.getElementById('closeInfo').addEventListener('click', () => this.hideLocationInfo());
-        this.mapCanvas.addEventListener('mousedown', (e) => this.startDrag(e));
-        this.mapCanvas.addEventListener('mousemove', (e) => this.drag(e));
-        this.mapCanvas.addEventListener('mouseup', () => this.endDrag());
-        this.mapCanvas.addEventListener('mouseleave', () => this.endDrag());
-        this.mapCanvas.addEventListener('click', (e) => this.handleMapClick(e));
-        this.mapCanvas.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
-        this.mapCanvas.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
-        this.mapCanvas.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false });
-        this.mapCanvas.addEventListener('wheel', (e) => this.handleWheel(e), { passive: false });
-        window.addEventListener('resize', () => this.handleResize());
-        document.addEventListener('keydown', (e) => this.handleKeyPress(e));
+        this.listen(document.getElementById('searchBtn'), 'click', () => this.search());
+        this.listen(this.searchInput, 'keydown', (e) => { if (e.key === 'Enter') this.search(); });
+        this.listen(document.getElementById('closeInfo'), 'click', () => this.hideLocationInfo());
+        this.listen(this.mapCanvas, 'mousedown', (e) => this.startDrag(e));
+        this.listen(this.mapCanvas, 'mousemove', (e) => this.drag(e));
+        this.listen(this.mapCanvas, 'mouseup', () => this.endDrag());
+        this.listen(this.mapCanvas, 'mouseleave', () => this.endDrag());
+        this.listen(this.mapCanvas, 'click', (e) => this.handleMapClick(e));
+        this.listen(this.mapCanvas, 'touchstart', (e) => this.handleTouchStart(e), { passive: false });
+        this.listen(this.mapCanvas, 'touchmove', (e) => this.handleTouchMove(e), { passive: false });
+        this.listen(this.mapCanvas, 'touchend', (e) => this.handleTouchEnd(e), { passive: false });
+        this.listen(this.mapCanvas, 'touchcancel', (e) => this.handleTouchEnd(e), { passive: false });
+        this.listen(this.mapCanvas, 'wheel', (e) => this.handleWheel(e), { passive: false });
+        this.listen(window, 'resize', () => this.handleResize());
+        this.listen(document, 'keydown', (e) => this.handleKeyPress(e));
     }
 
     createGrid() {
@@ -416,29 +436,6 @@ export default class GameMap {
         this.mapGrid.style.width = totalWidth + 'px';
         this.mapGrid.style.height = totalHeight + 'px';
         this.createWorldMapElement();
-        for (let row = 0; row < this.config.gridHeight; row++) {
-            for (let col = 0; col < this.config.gridWidth; col++) {
-                const tile = document.createElement('div');
-                tile.className = 'map-tile';
-                tile.dataset.row = row;
-                tile.dataset.col = col;
-                let tileX = col * this.config.tileSize;
-                let tileY = row * this.config.tileSize;
-                const subfolderRow = Math.floor(row / this.config.subfolderSize);
-                const subfolderCol = Math.floor(col / this.config.subfolderSize);
-                const subfolderKey = `subfolder_${subfolderRow}_${subfolderCol}`;
-                if (this.config.subfolderOffsets[subfolderKey]) {
-                    const offset = this.config.subfolderOffsets[subfolderKey];
-                    tileX += offset.x * this.config.tileSize;
-                    tileY += offset.y * this.config.tileSize;
-                }
-                tile.style.left = tileX + 'px';
-                tile.style.top = tileY + 'px';
-                tile.style.width = this.config.tileSize + 'px';
-                tile.style.height = this.config.tileSize + 'px';
-                this.mapGrid.appendChild(tile);
-            }
-        }
     }
 
     createWorldMapElement() {
@@ -447,22 +444,50 @@ export default class GameMap {
         this.worldMapLoadingStates = null;
         this.worldMapElement = document.createElement('img');
         this.worldMapElement.className = 'world-map-image world-map-single';
-        this.worldMapElement.src = this.config.worldMapPath;
+        this.worldMapElement.alt = '';
+        this.worldMapElement.setAttribute('aria-hidden', 'true');
+        this.worldMapElement.decoding = 'async';
+        this.worldMapElement.fetchPriority = 'low';
+        this.worldMapElement.style.cssText = 'position:absolute;top:0;left:0;opacity:0;pointer-events:none;z-index:10;image-rendering:auto;transform-origin:top left;';
+
+        this.mapGrid.appendChild(this.worldMapElement);
+        this.worldMapElement.onload = () => this.worldMapElement?.classList.add('loaded');
+        this.worldMapElement.onerror = () => this.worldMapElement?.classList.add('error');
+    }
+
+    getOrCreateTile(row, col) {
+        const tileKey = `${row}-${col}`;
+        const existing = this.tileElements.get(tileKey);
+        if (existing) return existing;
+
+        const tile = document.createElement('div');
+        const tilePosition = this.getTilePosition(row, col);
+        tile.className = 'map-tile';
+        tile.dataset.row = row;
+        tile.dataset.col = col;
+        tile.style.left = tilePosition.x + 'px';
+        tile.style.top = tilePosition.y + 'px';
+        tile.style.width = this.config.tileSize + 'px';
+        tile.style.height = this.config.tileSize + 'px';
+        this.tileElements.set(tileKey, tile);
+        this.mapGrid.appendChild(tile);
+        return tile;
+    }
+
+    updateWorldMapSource() {
+        if (!this.worldMapElement) return;
+        const levels = Object.values(this.config.worldMaps).sort((a, b) => b.threshold - a.threshold);
+        const level = levels.find((candidate) => this.zoom >= candidate.threshold) || levels[levels.length - 1];
+        if (!level || this.currentWorldMapLevel === level.path) return;
 
         const totalMapWidth = this.config.gridWidth * this.config.tileSize;
         const totalMapHeight = this.config.gridHeight * this.config.tileSize;
-        const naturalWidth = this.config.worldMapSize?.width || totalMapWidth;
-        const naturalHeight = this.config.worldMapSize?.height || totalMapHeight;
-        const scaleX = totalMapWidth / naturalWidth;
-        const scaleY = totalMapHeight / naturalHeight;
-
-        this.worldMapElement.style.cssText = `position:absolute;top:0;left:0;width:${naturalWidth}px;height:${naturalHeight}px;opacity:0;pointer-events:none;z-index:10;image-rendering:auto;will-change:transform,opacity;transform-origin:top left;`;
-        // Pre-scale the image to map coordinate space to avoid huge layout sizes
-        this.worldMapElement.style.transform = `scale(${scaleX}, ${scaleY})`;
-
-        this.mapGrid.appendChild(this.worldMapElement);
-        this.worldMapElement.onload = () => {};
-        this.worldMapElement.onerror = () => {};
+        this.currentWorldMapLevel = level.path;
+        this.worldMapElement.classList.remove('loaded', 'error');
+        this.worldMapElement.style.width = `${level.size.width}px`;
+        this.worldMapElement.style.height = `${level.size.height}px`;
+        this.worldMapElement.style.transform = `scale(${totalMapWidth / level.size.width}, ${totalMapHeight / level.size.height})`;
+        this.worldMapElement.src = level.path;
     }
 
     getTilePosition(row, col) {
@@ -480,7 +505,7 @@ export default class GameMap {
     }
 
     updateVisibleTiles() {
-        if (this.isWorldMapView) return;
+        if (this.destroyed || this.isWorldMapView) return;
         const canvas = this.mapCanvas.getBoundingClientRect();
         const canvasWidth = canvas.width;
         const canvasHeight = canvas.height;
@@ -488,93 +513,141 @@ export default class GameMap {
         const topBound = -this.offsetY / this.zoom;
         const rightBound = leftBound + canvasWidth / this.zoom;
         const bottomBound = topBound + canvasHeight / this.zoom;
-        let bufferMultiplier = 3;
+        let bufferTiles = 1;
         switch (this.devicePerformance.tier) {
-            case 'ultra': bufferMultiplier = 4; break;
-            case 'high': bufferMultiplier = 3.5; break;
-            case 'medium': bufferMultiplier = 3; break;
-            case 'low': bufferMultiplier = 2; break;
+            case 'ultra': bufferTiles = 1; break;
+            case 'high': bufferTiles = 1; break;
+            case 'medium': bufferTiles = 0.75; break;
+            case 'low': bufferTiles = 0.5; break;
         }
-        const buffer = this.config.tileSize * bufferMultiplier;
         const currentVisible = new Set();
-        let tilesToLoad = [];
-        for (let row = 0; row < this.config.gridHeight; row++) {
-            for (let col = 0; col < this.config.gridWidth; col++) {
-                const tilePos = this.getTilePosition(row, col);
-                const tileLeft = tilePos.x - buffer;
-                const tileRight = tilePos.x + this.config.tileSize + buffer;
-                const tileTop = tilePos.y - buffer;
-                const tileBottom = tilePos.y + this.config.tileSize + buffer;
-                if (tileRight >= leftBound && tileLeft <= rightBound && 
-                    tileBottom >= topBound && tileTop <= bottomBound) {
-                    const tileKey = `${row}-${col}`;
-                    currentVisible.add(tileKey);
-                    if (this.pendingUnloads.has(tileKey)) {
-                        clearTimeout(this.pendingUnloads.get(tileKey));
-                        this.pendingUnloads.delete(tileKey);
-                    }
-                    if (!this.loadedTiles.has(tileKey)) {
-                        if (this.failedTiles.has(tileKey)) {
-                            const failTime = this.failedTiles.get(tileKey);
-                            const retryDelay = 60000;
-                            if (Date.now() - failTime > retryDelay) {
-                                this.failedTiles.delete(tileKey);
-                                tilesToLoad.push({ row, col, priority: 'retry' });
-                            } else {
-                                const tile = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
-                                if (tile && !tile.classList.contains('missing') && !tile.classList.contains('error')) {
-                                    tile.classList.add('error');
-                                    tile.style.backgroundColor = '#2a2a2a';
-                                    tile.style.opacity = '0.3';
-                                }
-                            }
-                        } else {
-                            const centerX = leftBound + (rightBound - leftBound) / 2;
-                            const centerY = topBound + (bottomBound - topBound) / 2;
-                            const tilePos = this.getTilePosition(row, col);
-                            const tileCenterX = tilePos.x + this.config.tileSize / 2;
-                            const tileCenterY = tilePos.y + this.config.tileSize / 2;
-                            const distance = Math.sqrt(Math.pow(tileCenterX - centerX, 2) + Math.pow(tileCenterY - centerY, 2));
-                            tilesToLoad.push({ row, col, priority: 'normal', distance });
-                        }
+        const tilesToLoad = [];
+        const centerX = leftBound + (rightBound - leftBound) / 2;
+        const centerY = topBound + (bottomBound - topBound) / 2;
+        const addVisibleTile = (row, col) => {
+            const tileKey = `${row}-${col}`;
+            currentVisible.add(tileKey);
+            if (this.pendingUnloads.has(tileKey)) {
+                clearTimeout(this.pendingUnloads.get(tileKey));
+                this.pendingUnloads.delete(tileKey);
+            }
+            if (this.loadedTiles.has(tileKey) || this.activeTileLoads.has(tileKey) || this.queuedTiles.has(tileKey)) return;
+
+            if (this.failedTiles.has(tileKey)) {
+                const failedAt = this.failedTiles.get(tileKey);
+                if (Date.now() - failedAt <= 60000) {
+                    const tile = this.getOrCreateTile(row, col);
+                    tile.classList.add('missing');
+                    return;
+                }
+                this.failedTiles.delete(tileKey);
+            }
+
+            const tilePosition = this.getTilePosition(row, col);
+            const tileCenterX = tilePosition.x + this.config.tileSize / 2;
+            const tileCenterY = tilePosition.y + this.config.tileSize / 2;
+            tilesToLoad.push({
+                row,
+                col,
+                priority: 'normal',
+                distance: Math.hypot(tileCenterX - centerX, tileCenterY - centerY),
+            });
+        };
+
+        if (Object.keys(this.config.subfolderOffsets).length === 0) {
+            const range = getVisibleTileRange({
+                offsetX: this.offsetX,
+                offsetY: this.offsetY,
+                zoom: this.zoom,
+                viewportWidth: canvasWidth,
+                viewportHeight: canvasHeight,
+                tileSize: this.config.tileSize,
+                gridWidth: this.config.gridWidth,
+                gridHeight: this.config.gridHeight,
+                bufferTiles,
+            });
+            if (range) {
+                for (let row = range.startRow; row <= range.endRow; row++) {
+                    for (let col = range.startCol; col <= range.endCol; col++) addVisibleTile(row, col);
+                }
+            }
+        } else {
+            const buffer = this.config.tileSize * bufferTiles;
+            for (let row = 0; row < this.config.gridHeight; row++) {
+                for (let col = 0; col < this.config.gridWidth; col++) {
+                    const position = this.getTilePosition(row, col);
+                    if (position.x + this.config.tileSize >= leftBound - buffer && position.x <= rightBound + buffer &&
+                        position.y + this.config.tileSize >= topBound - buffer && position.y <= bottomBound + buffer) {
+                        addVisibleTile(row, col);
                     }
                 }
             }
         }
-        this.loadTilesWithPerformanceControl(tilesToLoad);
-        this.visibleTiles.forEach(tileKey => {
+
+        const previousVisible = this.visibleTiles;
+        this.visibleTiles = currentVisible;
+        this.cancelObsoleteTileWork(currentVisible);
+        previousVisible.forEach(tileKey => {
             if (!currentVisible.has(tileKey) && !this.pendingUnloads.has(tileKey)) {
                 this.scheduleUnloadWithPerformanceControl(tileKey);
             }
         });
-        this.visibleTiles = currentVisible;
+        this.loadTilesWithPerformanceControl(tilesToLoad);
     }
 
     loadTilesWithPerformanceControl(tilesToLoad) {
-        if (tilesToLoad.length === 0) return;
-        tilesToLoad.sort((a, b) => {
+        tilesToLoad.forEach((tile) => {
+            const tileKey = `${tile.row}-${tile.col}`;
+            if (this.queuedTiles.has(tileKey) || this.activeTileLoads.has(tileKey) || this.loadedTiles.has(tileKey)) return;
+            this.queuedTiles.add(tileKey);
+            this.tileQueue.push(tile);
+        });
+        this.tileQueue.sort((a, b) => {
             if (a.priority === 'retry' && b.priority !== 'retry') return -1;
             if (b.priority === 'retry' && a.priority !== 'retry') return 1;
             return a.distance - b.distance;
         });
+        this.pumpTileQueue();
+    }
+
+    pumpTileQueue() {
+        if (this.destroyed || this.isWorldMapView) {
+            this.updateLoadingIndicator();
+            return;
+        }
         const maxConcurrent = this.devicePerformance.capabilities.concurrentConnections;
-        const maxTiles = this.devicePerformance.capabilities.maxTiles;
-        const loadLimit = Math.min(tilesToLoad.length, maxTiles - this.loadedTiles.size);
-        const tilesToLoadNow = tilesToLoad.slice(0, loadLimit);
-        let loadedCount = 0;
-        const loadBatch = () => {
-            const batchSize = Math.min(maxConcurrent, tilesToLoadNow.length - loadedCount);
-            const batch = tilesToLoadNow.slice(loadedCount, loadedCount + batchSize);
-            batch.forEach(({ row, col }) => {
-                this.loadTile(row, col);
-            });
-            loadedCount += batchSize;
-            if (loadedCount < tilesToLoadNow.length) {
-                const delay = this.calculateBatchDelay();
-                setTimeout(loadBatch, delay);
-            }
-        };
-        loadBatch();
+        while (this.activeTileLoads.size < maxConcurrent && this.tileQueue.length > 0) {
+            const nextTile = this.tileQueue.shift();
+            const tileKey = `${nextTile.row}-${nextTile.col}`;
+            this.queuedTiles.delete(tileKey);
+            if (!this.visibleTiles.has(tileKey) || this.loadedTiles.has(tileKey)) continue;
+            this.loadTile(nextTile.row, nextTile.col, nextTile.retryCount || 0);
+        }
+        this.updateLoadingIndicator();
+    }
+
+    updateLoadingIndicator() {
+        if (!this.loadingIndicator) return;
+        const pending = this.activeTileLoads.size + this.tileQueue.length;
+        if (this.destroyed || this.isWorldMapView || pending === 0) {
+            this.loadingIndicator.classList.remove('visible');
+            return;
+        }
+        const loadedVisible = Array.from(this.visibleTiles).filter((tileKey) => this.loadedTiles.has(tileKey)).length;
+        this.loadingIndicator.textContent = `Loading map ${loadedVisible} / ${this.visibleTiles.size}`;
+        this.loadingIndicator.classList.add('visible');
+    }
+
+    cancelObsoleteTileWork(visibleTiles) {
+        this.tileQueue = this.tileQueue.filter(({ row, col }) => {
+            const tileKey = `${row}-${col}`;
+            if (visibleTiles.has(tileKey)) return true;
+            this.queuedTiles.delete(tileKey);
+            return false;
+        });
+        this.activeTileLoads.forEach((_request, tileKey) => {
+            if (!visibleTiles.has(tileKey)) this.cancelTileRequest(tileKey);
+        });
     }
 
     calculateBatchDelay() {
@@ -600,12 +673,7 @@ export default class GameMap {
     }
 
     subfolderExists(row, col) {
-        const subfolderRow = Math.floor(row / this.config.subfolderSize);
-        const subfolderCol = Math.floor(col / this.config.subfolderSize);
-        const subfolderKey = `subfolder_${subfolderRow}_${subfolderCol}`;
-            // Load tiles opportunistically; if a subfolder or tile is missing, loadTile will handle errors.
-            return true;
-        return existingSubfolders.includes(subfolderKey);
+        return row >= 0 && row < this.config.gridHeight && col >= 0 && col < this.config.gridWidth;
     }
 
     setOffsetPattern(pattern) {
@@ -642,7 +710,11 @@ export default class GameMap {
             default:
                 console.warn('Unknown offset pattern:', pattern);
         }
+        this.cancelAllTileRequests();
+        this.clearPendingUnloads();
         this.mapGrid.innerHTML = '';
+        this.tileElements.clear();
+        this.loadedTiles.clear();
         this.createGrid();
         this.updateVisibleTiles();
     }
@@ -680,58 +752,6 @@ export default class GameMap {
         }
     }
 
-    // Build a list of initial viewport tile URLs and ask SW to precache them
-    warmupCacheInitialTiles() {
-        try {
-            if (!this.cacheWarmup?.enabled) return;
-            if (!('serviceWorker' in navigator)) return;
-
-            const canvas = this.mapCanvas.getBoundingClientRect();
-            const canvasWidth = canvas.width;
-            const canvasHeight = canvas.height;
-            const leftBound = -this.offsetX / this.zoom;
-            const topBound = -this.offsetY / this.zoom;
-            const rightBound = leftBound + canvasWidth / this.zoom;
-            const bottomBound = topBound + canvasHeight / this.zoom;
-
-            const extra = this.cacheWarmup.bufferTiles * this.config.tileSize;
-            const urls = [];
-            const tiles = [];
-            for (let row = 0; row < this.config.gridHeight; row++) {
-                for (let col = 0; col < this.config.gridWidth; col++) {
-                    const pos = this.getTilePosition(row, col);
-                    const tileLeft = pos.x - extra;
-                    const tileRight = pos.x + this.config.tileSize + extra;
-                    const tileTop = pos.y - extra;
-                    const tileBottom = pos.y + this.config.tileSize + extra;
-                    if (tileRight >= leftBound && tileLeft <= rightBound && tileBottom >= topBound && tileTop <= bottomBound) {
-                        const centerX = (leftBound + rightBound) / 2;
-                        const centerY = (topBound + bottomBound) / 2;
-                        const tileCenterX = pos.x + this.config.tileSize / 2;
-                        const tileCenterY = pos.y + this.config.tileSize / 2;
-                        const distance = Math.hypot(tileCenterX - centerX, tileCenterY - centerY);
-                        tiles.push({ row, col, distance });
-                    }
-                }
-            }
-            tiles.sort((a, b) => a.distance - b.distance);
-            const limit = this.cacheWarmup.limit || 300;
-            for (let i = 0; i < tiles.length && i < limit; i++) {
-                urls.push(this.getTilePath(tiles[i].row, tiles[i].col));
-            }
-
-            // Post to SW once ready
-            navigator.serviceWorker.ready.then((reg) => {
-                const sw = reg.active;
-                if (sw) {
-                    sw.postMessage({ type: 'PRECACHE_TILES', urls, limit, concurrency: this.cacheWarmup.concurrency });
-                }
-            }).catch(() => {});
-        } catch (e) {
-            // no-op
-        }
-    }
-
     toggleControls() {
         this.controlsVisible = !this.controlsVisible;
         const controlsPanel = document.getElementById('mapControls');
@@ -739,26 +759,36 @@ export default class GameMap {
         if (this.controlsVisible) {
             controlsPanel.classList.add('visible');
             toggleButton.classList.add('active');
+            toggleButton.setAttribute('aria-expanded', 'true');
+            toggleButton.setAttribute('aria-label', 'Close map controls');
         } else {
             controlsPanel.classList.remove('visible');
             toggleButton.classList.remove('active');
+            toggleButton.setAttribute('aria-expanded', 'false');
+            toggleButton.setAttribute('aria-label', 'Open map controls');
         }
     }
 
     showControls() {
         this.controlsVisible = true;
         document.getElementById('mapControls').classList.add('visible');
-        document.getElementById('toggleControls').classList.add('active');
+        const toggleButton = document.getElementById('toggleControls');
+        toggleButton.classList.add('active');
+        toggleButton.setAttribute('aria-expanded', 'true');
+        toggleButton.setAttribute('aria-label', 'Close map controls');
     }
 
     hideControls() {
         this.controlsVisible = false;
         document.getElementById('mapControls').classList.remove('visible');
-        document.getElementById('toggleControls').classList.remove('active');
+        const toggleButton = document.getElementById('toggleControls');
+        toggleButton.classList.remove('active');
+        toggleButton.setAttribute('aria-expanded', 'false');
+        toggleButton.setAttribute('aria-label', 'Open map controls');
     }
 
     handleTouchStart(e) {
-        e.preventDefault();
+        e.preventDefault?.();
         this.touches = Array.from(e.touches);
         if (this.touches.length === 1) {
             this.startDrag(this.getTouchEvent(e));
@@ -771,7 +801,7 @@ export default class GameMap {
     }
 
     handleTouchMove(e) {
-        e.preventDefault();
+        e.preventDefault?.();
         this.touches = Array.from(e.touches);
         if (this.touches.length === 1 && !this.isPinching) {
             this.drag(this.getTouchEvent(e));
@@ -808,19 +838,25 @@ export default class GameMap {
         const rect = this.mapCanvas.getBoundingClientRect();
         const x = clientX - rect.left;
         const y = clientY - rect.top;
-        const worldX = (x - this.offsetX) / this.zoom;
-        const worldY = (y - this.offsetY) / this.zoom;
         newZoom = Math.max(this.config.minZoom, Math.min(this.config.maxZoom, newZoom));
-        this.offsetX = x - worldX * newZoom;
-        this.offsetY = y - worldY * newZoom;
+        const offsets = zoomAroundPoint({
+            zoom: this.zoom,
+            newZoom,
+            offsetX: this.offsetX,
+            offsetY: this.offsetY,
+            pointX: x,
+            pointY: y,
+        });
+        this.offsetX = offsets.offsetX;
+        this.offsetY = offsets.offsetY;
         this.zoom = newZoom;
         this.updateTransform();
-        this.throttledUpdateTiles();
-        this.updateMapView();
     }
 
     handleKeyPress(e) {
-        if (e.target.tagName === 'INPUT') return;
+        const tagName = e.target.tagName;
+        if (e.target.isContentEditable || ['INPUT', 'TEXTAREA', 'BUTTON', 'SELECT'].includes(tagName)) return;
+        const panStep = e.shiftKey ? 240 : 80;
         switch(e.key) {
             case 'Escape':
                 this.hideControls();
@@ -843,6 +879,26 @@ export default class GameMap {
                 e.preventDefault();
                 this.resetView();
                 break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                this.offsetX += panStep;
+                this.updateTransform();
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                this.offsetX -= panStep;
+                this.updateTransform();
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                this.offsetY += panStep;
+                this.updateTransform();
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                this.offsetY -= panStep;
+                this.updateTransform();
+                break;
             case 'h':
             case 'H':
                 if (e.ctrlKey || e.metaKey) return;
@@ -859,14 +915,15 @@ export default class GameMap {
     forceWorldMapView(force = true) {
         if (force) {
             this.isWorldMapView = true;
+            this.updateWorldMapSource();
             this.worldMapElement.style.opacity = '1';
             this.worldMapElement.style.pointerEvents = 'auto';
-            document.querySelectorAll('.map-tile').forEach(tile => { tile.style.opacity = '0'; });
+            this.tileElements.forEach(tile => { tile.style.opacity = '0'; });
         } else {
             this.isWorldMapView = false;
             this.worldMapElement.style.opacity = '0';
             this.worldMapElement.style.pointerEvents = 'none';
-            document.querySelectorAll('.map-tile.loaded').forEach(tile => { tile.style.opacity = '1'; });
+            this.tileElements.forEach(tile => { if (tile.classList.contains('loaded')) tile.style.opacity = '1'; });
         }
     }
 
@@ -878,10 +935,10 @@ export default class GameMap {
     updateWorldMapImage(imagePath) { this.config.worldMapPath = imagePath; this.worldMapElement.src = imagePath; }
 
     loadTile(row, col, retryCount = 0) {
-        if (this.isWorldMapView) return;
+        if (this.destroyed || this.isWorldMapView) return;
         const tileKey = `${row}-${col}`;
-        const tile = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
-        if (!tile) return;
+        if (!this.visibleTiles.has(tileKey) || this.activeTileLoads.has(tileKey)) return;
+        const tile = this.getOrCreateTile(row, col);
         if (!this.subfolderExists(row, col)) {
             tile.classList.remove('loading', 'error', 'loaded');
             tile.classList.add('missing');
@@ -892,16 +949,34 @@ export default class GameMap {
             return;
         }
         if (this.loadedTiles.has(tileKey) && tile.classList.contains('loaded')) return;
-        if (tile.classList.contains('loading') && retryCount === 0) return;
         tile.classList.remove('error', 'unloaded', 'missing');
         tile.classList.add('loading');
         const img = new Image();
+        img.decoding = 'async';
         const tilePath = this.getTilePath(row, col);
-        const cacheBuster = retryCount > 0 ? `?retry=${retryCount}&t=${Date.now()}` : '';
-        const loadTimeout = setTimeout(() => { this.handleTileLoadError(row, col, retryCount); }, 8000);
+        const request = { img, timeoutId: null, row, col, retryCount };
+        this.activeTileLoads.set(tileKey, request);
+
+        const finish = () => {
+            if (this.activeTileLoads.get(tileKey) !== request) return false;
+            clearTimeout(request.timeoutId);
+            img.onload = null;
+            img.onerror = null;
+            img.onabort = null;
+            this.activeTileLoads.delete(tileKey);
+            return true;
+        };
+        const fail = () => {
+            if (!finish()) return;
+            img.src = '';
+            this.handleTileLoadError(row, col, retryCount);
+            this.pumpTileQueue();
+        };
+
+        request.timeoutId = setTimeout(fail, 8000);
         img.onload = () => {
-            clearTimeout(loadTimeout);
-            if (tile && !tile.classList.contains('unloaded')) {
+            if (!finish()) return;
+            if (!this.destroyed && this.visibleTiles.has(tileKey) && !tile.classList.contains('unloaded')) {
                 const imageUrl = `url("${img.src}")`;
                 tile.style.backgroundImage = imageUrl;
                 tile.classList.remove('loading', 'error');
@@ -910,25 +985,34 @@ export default class GameMap {
                 this.loadedTiles.set(tileKey, img.src);
                 this.failedTiles.delete(tileKey);
             }
+            this.pumpTileQueue();
         };
-        img.onerror = () => { clearTimeout(loadTimeout); this.handleTileLoadError(row, col, retryCount); };
-        img.onabort = () => { clearTimeout(loadTimeout); this.handleTileLoadError(row, col, retryCount); };
-        img.src = tilePath + cacheBuster;
+        img.onerror = fail;
+        img.onabort = fail;
+        img.src = tilePath;
     }
 
     handleTileLoadError(row, col, retryCount) {
         const tileKey = `${row}-${col}`;
-        const tile = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
-        if (!tile) return;
+        if (this.destroyed) return;
+        const tile = this.getOrCreateTile(row, col);
         if (retryCount < this.maxRetries) {
             const retryDelay = retryCount === 0 ? 500 : Math.min(1000 * Math.pow(2, retryCount - 1), 5000);
             tile.classList.remove('loading');
             tile.classList.add('error');
-            setTimeout(() => {
+            const retryTimer = setTimeout(() => {
+                this.retryTimers.delete(tileKey);
                 if (this.visibleTiles.has(tileKey) && !this.loadedTiles.has(tileKey)) {
-                    this.loadTile(row, col, retryCount + 1);
+                    this.loadTilesWithPerformanceControl([{
+                        row,
+                        col,
+                        retryCount: retryCount + 1,
+                        priority: 'retry',
+                        distance: 0,
+                    }]);
                 }
             }, retryDelay);
+            this.retryTimers.set(tileKey, retryTimer);
         } else {
             tile.classList.remove('loading', 'error', 'loaded');
             tile.classList.add('missing');
@@ -940,44 +1024,58 @@ export default class GameMap {
         }
     }
 
+    cancelTileRequest(tileKey) {
+        const request = this.activeTileLoads.get(tileKey);
+        if (!request) return;
+        clearTimeout(request.timeoutId);
+        request.img.onload = null;
+        request.img.onerror = null;
+        request.img.onabort = null;
+        request.img.src = '';
+        this.activeTileLoads.delete(tileKey);
+        const tile = this.tileElements.get(tileKey);
+        tile?.classList.remove('loading');
+        this.pumpTileQueue();
+    }
+
+    cancelAllTileRequests() {
+        this.tileQueue = [];
+        this.queuedTiles.clear();
+        Array.from(this.activeTileLoads.keys()).forEach((tileKey) => this.cancelTileRequest(tileKey));
+        this.retryTimers.forEach((timeoutId) => clearTimeout(timeoutId));
+        this.retryTimers.clear();
+    }
+
     unloadTile(tileKey) {
-        const [row, col] = tileKey.split('-');
-        const tile = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+        if (this.visibleTiles.has(tileKey)) return;
+        this.cancelTileRequest(tileKey);
+        const tile = this.tileElements.get(tileKey);
         if (!tile) { this.loadedTiles.delete(tileKey); return; }
-        if (tile.classList.contains('loading')) {
-            tile.classList.add('pending-unload');
-            setTimeout(() => {
-                if (tile.classList.contains('pending-unload') && !this.visibleTiles.has(tileKey)) {
-                    this.unloadTile(tileKey);
-                } else {
-                    tile.classList.remove('pending-unload');
-                }
-            }, 1000);
-            return;
-        }
         if (tile.classList.contains('unloaded')) return;
         tile.classList.add('unloaded');
-        tile.classList.remove('pending-unload');
         tile.style.opacity = '0';
-        setTimeout(() => {
-            if (tile && tile.classList.contains('unloaded')) {
-                tile.style.backgroundImage = '';
-                tile.style.backgroundColor = '';
-                tile.style.opacity = '';
-                tile.classList.remove('loaded', 'unloaded', 'error', 'missing');
+        const removalTimer = setTimeout(() => {
+            this.tileRemovalTimers.delete(removalTimer);
+            if (tile.classList.contains('unloaded') && !this.visibleTiles.has(tileKey)) {
+                tile.remove();
+                this.tileElements.delete(tileKey);
             }
         }, 200);
+        this.tileRemovalTimers.add(removalTimer);
         this.loadedTiles.delete(tileKey);
     }
 
     createPins() {
         this.pinLayer.innerHTML = '';
         this.locations.forEach(location => {
-            const pin = document.createElement('div');
+            const pin = document.createElement('button');
+            pin.type = 'button';
             pin.className = `map-pin ${location.type}`;
             pin.style.left = location.x + 'px';
             pin.style.top = location.y + 'px';
             pin.dataset.locationId = location.id;
+            pin.setAttribute('aria-label', location.name);
+            pin.title = location.name;
             pin.addEventListener('click', (e) => { e.stopPropagation(); this.showLocationInfo(location); });
             this.pinLayer.appendChild(pin);
         });
@@ -1009,7 +1107,6 @@ export default class GameMap {
         if (this.pendingUnloads.has(tileKey)) return;
         let adjustedDelay = this.tileUnloadDelay;
         if (this.devicePerformance.memory < 4) adjustedDelay = Math.max(500, this.tileUnloadDelay * 0.5);
-        else if (this.devicePerformance.memory > 16) adjustedDelay = this.tileUnloadDelay * 1.5;
         const maxTilesForDevice = this.devicePerformance.capabilities.maxTiles;
         if (this.loadedTiles.size > maxTilesForDevice) adjustedDelay = Math.max(200, adjustedDelay * 0.3);
         const timeoutId = setTimeout(() => { this.unloadTile(tileKey); this.pendingUnloads.delete(tileKey); }, adjustedDelay);
@@ -1052,31 +1149,46 @@ export default class GameMap {
     retryFailedTiles() {
         const failedTileKeys = Array.from(this.failedTiles.keys());
         this.failedTiles.clear();
-        failedTileKeys.forEach(tileKey => {
+        const tilesToRetry = failedTileKeys.flatMap(tileKey => {
             const [row, col] = tileKey.split('-').map(Number);
-            if (this.visibleTiles.has(tileKey)) this.loadTile(row, col);
+            return this.visibleTiles.has(tileKey) ? [{ row, col, priority: 'retry', distance: 0 }] : [];
         });
+        this.loadTilesWithPerformanceControl(tilesToRetry);
     }
 
     getTileLoadingStatus() {
-        const status = { totalTiles: this.config.gridWidth * this.config.gridHeight, loadedTiles: this.loadedTiles.size, visibleTiles: this.visibleTiles.size, failedTiles: this.failedTiles.size, pendingUnloads: this.pendingUnloads.size };
+        const status = {
+            totalTiles: this.config.gridWidth * this.config.gridHeight,
+            loadedTiles: this.loadedTiles.size,
+            visibleTiles: this.visibleTiles.size,
+            activeRequests: this.activeTileLoads.size,
+            queuedRequests: this.tileQueue.length,
+            failedTiles: this.failedTiles.size,
+            pendingUnloads: this.pendingUnloads.size,
+        };
         return status;
     }
 
     reloadVisibleTiles() {
+        this.cancelAllTileRequests();
         this.loadedTiles.clear();
         this.failedTiles.clear();
-        document.querySelectorAll('.map-tile').forEach(tile => {
+        this.tileElements.forEach(tile => {
             tile.style.backgroundImage = '';
             tile.classList.remove('loaded', 'loading', 'error', 'unloaded', 'missing');
             tile.style.backgroundColor = '';
         });
-        this.visibleTiles.forEach(tileKey => { const [row, col] = tileKey.split('-').map(Number); this.loadTile(row, col); });
+        const tiles = Array.from(this.visibleTiles, (tileKey) => {
+            const [row, col] = tileKey.split('-').map(Number);
+            return { row, col, priority: 'normal', distance: 0 };
+        });
+        this.loadTilesWithPerformanceControl(tiles);
     }
 
     updateMapView() {
         const shouldShowWorldMap = this.zoom < this.config.worldMapThreshold;
         if (shouldShowWorldMap) {
+            this.updateWorldMapSource();
             if (!this.isWorldMapView) {
                 const rect = this.mapCanvas.getBoundingClientRect();
                 const viewCenterX = (rect.width / 2 - this.offsetX) / this.zoom;
@@ -1086,29 +1198,31 @@ export default class GameMap {
                     this.worldMapElement.style.opacity = '1';
                     this.worldMapElement.style.pointerEvents = 'auto';
                 }
-                this.currentWorldMapLevel = null;
+                this.cancelAllTileRequests();
+                const tilesToRelease = this.visibleTiles;
+                this.visibleTiles = new Set();
+                tilesToRelease.forEach((tileKey) => this.scheduleUnloadWithPerformanceControl(tileKey));
                 this.offsetX = rect.width / 2 - (viewCenterX * this.zoom);
                 this.offsetY = rect.height / 2 - (viewCenterY * this.zoom);
                 const transform = `translate(${this.offsetX}px, ${this.offsetY}px) scale(${this.zoom})`;
                 this.mapGrid.style.transform = transform;
                 this.pinLayer.style.transform = transform;
                 if (!this.tilesHidden) {
-                    document.querySelectorAll('.map-tile').forEach(tile => { tile.style.opacity = '0'; });
+                    this.tileElements.forEach(tile => { tile.style.opacity = '0'; });
                     this.tilesHidden = true;
                 }
             }
         } else if (this.isWorldMapView) {
             this.isWorldMapView = false;
-            this.currentWorldMapLevel = null;
             if (this.worldMapElement) {
                 this.worldMapElement.style.opacity = '0';
                 this.worldMapElement.style.pointerEvents = 'none';
             }
             if (this.tilesHidden) {
-                document.querySelectorAll('.map-tile.loaded').forEach(tile => { tile.style.opacity = '1'; });
+                this.tileElements.forEach(tile => { if (tile.classList.contains('loaded')) tile.style.opacity = '1'; });
                 this.tilesHidden = false;
             }
-            setTimeout(() => { this.updateVisibleTiles(); }, 100);
+            this.updateVisibleTiles();
         }
     }
 
@@ -1117,7 +1231,7 @@ export default class GameMap {
         this.mapCanvas.classList.add('dragging');
         this.lastMouseX = e.clientX;
         this.lastMouseY = e.clientY;
-        e.preventDefault();
+        e.preventDefault?.();
     }
 
     drag(e) {
@@ -1129,7 +1243,7 @@ export default class GameMap {
         this.lastMouseX = e.clientX;
         this.lastMouseY = e.clientY;
         this.updateTransform();
-        e.preventDefault();
+        e.preventDefault?.();
     }
 
     endDrag() {
@@ -1206,9 +1320,16 @@ export default class GameMap {
             const rect = this.mapCanvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
-            const actualZoomFactor = newZoom / this.zoom;
-            this.offsetX = mouseX - (mouseX - this.offsetX) * actualZoomFactor;
-            this.offsetY = mouseY - (mouseY - this.offsetY) * actualZoomFactor;
+            const offsets = zoomAroundPoint({
+                zoom: this.zoom,
+                newZoom,
+                offsetX: this.offsetX,
+                offsetY: this.offsetY,
+                pointX: mouseX,
+                pointY: mouseY,
+            });
+            this.offsetX = offsets.offsetX;
+            this.offsetY = offsets.offsetY;
             this.zoom = newZoom;
             this.updateTransform();
         }
@@ -1220,9 +1341,16 @@ export default class GameMap {
         const rect = this.mapCanvas.getBoundingClientRect();
         const centerX = rect.width / 2;
         const centerY = rect.height / 2;
-        const zoomFactor = newZoom / this.zoom;
-        this.offsetX = centerX - (centerX - this.offsetX) * zoomFactor;
-        this.offsetY = centerY - (centerY - this.offsetY) * zoomFactor;
+        const offsets = zoomAroundPoint({
+            zoom: this.zoom,
+            newZoom,
+            offsetX: this.offsetX,
+            offsetY: this.offsetY,
+            pointX: centerX,
+            pointY: centerY,
+        });
+        this.offsetX = offsets.offsetX;
+        this.offsetY = offsets.offsetY;
         this.zoom = newZoom;
         this.updateTransform();
     }
@@ -1239,13 +1367,20 @@ export default class GameMap {
 
     search() {
         const query = this.searchInput.value.toLowerCase().trim();
-        if (!query) return;
+        const status = document.getElementById('searchStatus');
+        if (!query) {
+            if (status) status.textContent = 'Enter a location name or description.';
+            return;
+        }
         const location = this.locations.find(loc => loc.name.toLowerCase().includes(query) || loc.description.toLowerCase().includes(query));
         if (location) {
+            if (status) status.textContent = `Showing ${location.name}.`;
             this.zoomToLevel(this.config.initialZoom);
             this.panToLocation(location);
             this.showLocationInfo(location);
-        } else { alert('Location not found'); }
+        } else if (status) {
+            status.textContent = `No locations match “${this.searchInput.value.trim()}”.`;
+        }
     }
 
     panToLocation(location) {
@@ -1271,14 +1406,34 @@ export default class GameMap {
         this.setupElements();
         this.setupEventListeners();
         this.createGrid();
-        this.updateVisibleTiles();
         this.createPins();
         this.centerMap();
-        // After centering, warm up cache for initial viewport tiles
-        this.updateVisibleTiles();
-        this.warmupCacheInitialTiles();
         this.updateDebugButtonState();
         this.hideControls();
-        this.startPerformanceMonitoring();
+    }
+
+    destroy() {
+        if (this.destroyed) return;
+        this.destroyed = true;
+        this.eventCleanups.splice(0).forEach((cleanup) => cleanup());
+        this.throttledUpdateTiles.cancel?.();
+        this.cancelAllTileRequests();
+        this.clearPendingUnloads();
+        this.tileRemovalTimers.forEach((timeoutId) => clearTimeout(timeoutId));
+        this.tileRemovalTimers.clear();
+        this.stopMemoryMonitoring();
+        if (this.performanceFrameId !== null) {
+            cancelAnimationFrame(this.performanceFrameId);
+            this.performanceFrameId = null;
+        }
+        if (this.worldMapElement) {
+            this.worldMapElement.onload = null;
+            this.worldMapElement.onerror = null;
+        }
+        this.tileElements.clear();
+        this.loadedTiles.clear();
+        this.visibleTiles.clear();
+        this.mapGrid?.replaceChildren();
+        this.pinLayer?.replaceChildren();
     }
 }
