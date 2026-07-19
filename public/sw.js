@@ -1,53 +1,87 @@
-/*
-  Basic service worker to cache tiles and static assets.
-  Strategy:
-  - Static assets: pre-cache at install (app shell)
-  - Tiles and world maps: cache-first with network fallback; update in background
-*/
+const CACHE_PREFIX = 'sl2-map-';
+const APP_CACHE = `${CACHE_PREFIX}app-shell-v3`;
+const META_CACHE = `${CACHE_PREFIX}metadata-v1`;
+const FALLBACK_TILE_CACHE = `${CACHE_PREFIX}images-runtime-v3`;
+const VERSION_KEY = new URL('/__sl2_tile_cache_version__', self.location.origin).href;
+const MAX_PRECACHE_FILES = 3000;
 
-const APP_CACHE = 'app-shell-v2';
-const TILE_CACHE = 'tiles-v2';
+let tileCacheNamePromise;
 
-const APP_SHELL = [
-  '/',
-  '/index.html',
-  '/src/main.jsx',
-  '/src/App.jsx',
-  '/src/styles.css',
-  // Precache commonly used world map images (small sizes helpful for initial view)
-  '/World_Map_Optimized_tiny.jpg',
-  '/World_Map_Optimized_small.jpg',
-  '/World_Map_Optimized_medium.jpg',
-  '/World_Map_Optimized_large.jpg',
-];
+function cacheNameForVersion(version) {
+  return typeof version === 'string' && /^[a-f0-9]{40}$/i.test(version)
+    ? `${CACHE_PREFIX}images-${version}`
+    : FALLBACK_TILE_CACHE;
+}
+
+async function rememberTileVersion(version) {
+  const cache = await caches.open(META_CACHE);
+  await cache.put(VERSION_KEY, new Response(version, { headers: { 'content-type': 'text/plain' } }));
+}
+
+async function resolveTileCacheName(refresh = false) {
+  if (!refresh && tileCacheNamePromise) return tileCacheNamePromise;
+  tileCacheNamePromise = (async () => {
+    try {
+      const response = await fetch('/cache-version.json', { cache: 'no-store' });
+      if (response.ok) {
+        const manifest = await response.json();
+        const cacheName = cacheNameForVersion(manifest.version);
+        if (cacheName !== FALLBACK_TILE_CACHE) {
+          await rememberTileVersion(manifest.version);
+          return cacheName;
+        }
+      }
+    } catch {}
+
+    try {
+      const metadata = await caches.open(META_CACHE);
+      const storedVersion = await metadata.match(VERSION_KEY);
+      if (storedVersion) return cacheNameForVersion(await storedVersion.text());
+    } catch {}
+    return FALLBACK_TILE_CACHE;
+  })();
+  return tileCacheNamePromise;
+}
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(APP_CACHE).then((cache) => cache.addAll(APP_SHELL))
-  );
+  event.waitUntil(Promise.all([
+    precacheAppShell(),
+    resolveTileCacheName(true),
+  ]));
   self.skipWaiting();
 });
 
+async function precacheAppShell() {
+  const cache = await caches.open(APP_CACHE);
+  const indexResponse = await fetch('/index.html', { cache: 'no-store' });
+  if (!indexResponse.ok) throw new Error(`Unable to cache app shell: HTTP ${indexResponse.status}`);
+  await cache.put('/', indexResponse.clone());
+  await cache.put('/index.html', indexResponse.clone());
+  const html = await indexResponse.text();
+  const assetUrls = Array.from(html.matchAll(/(?:src|href)="(\/assets\/[^"?#]+)"/g), (match) => match[1]);
+  await cache.addAll(['/manifest.webmanifest', ...new Set(assetUrls)]);
+}
+
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    (async () => {
-      const keys = await caches.keys();
-      await Promise.all(
-        keys
-          .filter((key) => ![APP_CACHE, TILE_CACHE].includes(key))
-          .map((key) => caches.delete(key))
-      );
-      await self.clients.claim();
-    })()
-  );
+  event.waitUntil((async () => {
+    const tileCache = await resolveTileCacheName();
+    const currentCaches = new Set([APP_CACHE, META_CACHE, tileCache]);
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter((key) => key.startsWith(CACHE_PREFIX) && !currentCaches.has(key))
+        .map((key) => caches.delete(key))
+    );
+    await self.clients.claim();
+  })());
 });
 
-function isTileOrWorldMapRequest(url) {
+function isMapImageRequest(url) {
   try {
-    const u = new URL(url);
-    return (
-      u.pathname.startsWith('/tiles/') ||
-      u.pathname.includes('World_Map_Optimized')
+    const parsed = new URL(url);
+    return parsed.origin === self.location.origin && (
+      parsed.pathname.startsWith('/tiles/') ||
+      /^\/World_Map_Optimized_[^/]+\.(?:jpg|jpeg|png|webp)$/i.test(parsed.pathname)
     );
   } catch {
     return false;
@@ -56,108 +90,115 @@ function isTileOrWorldMapRequest(url) {
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-
-  // Only handle GET requests
   if (request.method !== 'GET') return;
 
-  const url = request.url;
-
-  // Cache-first for tiles and world maps
-  if (isTileOrWorldMapRequest(url)) {
-    event.respondWith(
-      (async () => {
-        const cache = await caches.open(TILE_CACHE);
-        const cached = await cache.match(request);
-        if (cached) {
-          // Update in background to keep cache fresh
-          event.waitUntil(
-            fetch(request)
-              .then((resp) => {
-                if (resp && resp.status === 200) {
-                  cache.put(request, resp.clone());
-                }
-              })
-              .catch(() => {})
-          );
-          return cached;
-        }
-        try {
-          const resp = await fetch(request);
-          if (resp && resp.status === 200) {
-            cache.put(request, resp.clone());
-          }
-          return resp;
-        } catch (e) {
-          // Optional: return a placeholder image if offline/no cache
-          return cached || Response.error();
-        }
-      })()
-    );
+  if (isMapImageRequest(request.url)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(await resolveTileCacheName());
+      const cached = await cache.match(request);
+      if (cached) return cached;
+      try {
+        const response = await fetch(request);
+        if (response.ok) await cache.put(request, response.clone());
+        return response;
+      } catch {
+        return Response.error();
+      }
+    })());
     return;
   }
 
-  // For other same-origin requests: stale-while-revalidate
-  event.respondWith(
-    (async () => {
+  if (!request.url.startsWith(self.location.origin)) return;
+  if (request.mode === 'navigate') {
+    event.respondWith((async () => {
       const cache = await caches.open(APP_CACHE);
-      const cached = await cache.match(request);
-      const networkPromise = fetch(request)
-        .then((resp) => {
-          if (resp && resp.status === 200 && request.url.startsWith(self.location.origin)) {
-            cache.put(request, resp.clone());
-          }
-          return resp;
-        })
-        .catch(() => undefined);
-      return cached || networkPromise || Response.error();
-    })()
-  );
+      try {
+        const response = await fetch(request);
+        if (response.ok) await cache.put('/index.html', response.clone());
+        return response;
+      } catch {
+        return (await cache.match('/index.html')) || Response.error();
+      }
+    })());
+    return;
+  }
+
+  event.respondWith((async () => {
+    const cache = await caches.open(APP_CACHE);
+    const cached = await cache.match(request);
+    if (cached) {
+      event.waitUntil(fetch(request)
+        .then((response) => response.ok ? cache.put(request, response.clone()) : undefined)
+        .catch(() => undefined));
+      return cached;
+    }
+    try {
+      const response = await fetch(request);
+      if (response.ok) await cache.put(request, response.clone());
+      return response;
+    } catch {
+      return Response.error();
+    }
+  })());
 });
 
-// Handle messages from client to precache specific tile URLs (with concurrency limit)
-// Broadcast helper
-async function broadcast(msg) {
+async function notify(client, message) {
   try {
-    const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
-    clients.forEach(c => c.postMessage(msg));
+    client?.postMessage(message);
   } catch {}
 }
 
 self.addEventListener('message', (event) => {
   const data = event.data || {};
-  if (data && data.type === 'PRECACHE_TILES' && Array.isArray(data.urls)) {
-    const urls = data.urls.slice(0, data.limit || 300); // safety cap
-    const concurrency = Math.min(Math.max(data.concurrency || 8, 2), 16);
-    event.waitUntil(
-      (async () => {
-        const cache = await caches.open(TILE_CACHE);
-        let idx = 0;
-        let completed = 0;
-        const total = urls.length;
-        await broadcast({ type: 'PRECACHE_START', total });
-        const workers = new Array(concurrency).fill(0).map(async () => {
-          while (idx < urls.length) {
-            const myIndex = idx++;
-            const url = urls[myIndex];
-            try {
-              const req = new Request(url, { mode: 'same-origin' });
-              const already = await cache.match(req);
-              if (!already) {
-                const resp = await fetch(req);
-                if (resp && resp.status === 200) {
-                  await cache.put(req, resp.clone());
-                }
-              }
-            } catch {}
-            completed++;
-            if (completed % 25 === 0 || completed === total) {
-              await broadcast({ type: 'PRECACHE_PROGRESS', completed, total });
-            }
+  if (data.type !== 'PRECACHE_TILES' || !Array.isArray(data.urls)) return;
+
+  const urls = data.urls
+    .filter((url) => {
+      try {
+        return isMapImageRequest(new URL(url, self.location.origin).href);
+      } catch {
+        return false;
+      }
+    })
+    .slice(0, MAX_PRECACHE_FILES);
+  const concurrency = Math.min(Math.max(data.concurrency || 4, 2), 6);
+  const client = event.source;
+
+  event.waitUntil((async () => {
+    const requestedCacheName = cacheNameForVersion(data.version);
+    if (requestedCacheName !== FALLBACK_TILE_CACHE) {
+      await rememberTileVersion(data.version);
+      tileCacheNamePromise = Promise.resolve(requestedCacheName);
+    }
+    const cache = await caches.open(await resolveTileCacheName());
+    let index = 0;
+    let completed = 0;
+    let failed = 0;
+    const total = urls.length;
+    await notify(client, { type: 'PRECACHE_START', total });
+
+    const workers = Array.from({ length: concurrency }, async () => {
+      while (index < urls.length) {
+        const url = urls[index++];
+        try {
+          const request = new Request(url, { mode: 'same-origin' });
+          const cached = await cache.match(request);
+          if (!cached) {
+            const response = await fetch(request);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            await cache.put(request, response.clone());
           }
-        });
-        await Promise.all(workers);
-        await broadcast({ type: 'PRECACHE_DONE', total });
-      })()
-    );
-  }
+        } catch {
+          failed++;
+        }
+        completed++;
+        if (completed % 10 === 0 || completed === total) {
+          await notify(client, { type: 'PRECACHE_PROGRESS', completed, failed, total });
+        }
+      }
+    });
+
+    await Promise.all(workers);
+    await notify(client, { type: 'PRECACHE_DONE', completed, failed, total });
+  })());
 });

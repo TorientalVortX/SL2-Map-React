@@ -6,7 +6,22 @@
 /tiles/*
   Cache-Control: public, max-age=31536000, immutable
 
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/World_Map_Optimized_*.jpg
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/index.html
+  Cache-Control: no-cache
+
 /sw.js
+  Cache-Control: no-cache
+
+/cache-manifest.json
+  Cache-Control: no-cache
+
+/cache-version.json
   Cache-Control: no-cache
 
 /manifest.webmanifest
