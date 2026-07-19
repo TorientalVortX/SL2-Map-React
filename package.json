@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test",
     "preview": "vite preview",
     "slice-map": "node scripts/slice-map.js --input \"%MAP_INPUT%\" --outDir \"public/tiles\" --tileSize 800 --subfolderSize 6 --quality 75",
     "stitch-worldmaps": "node scripts/stitch-worldmaps.js --tilesDir \"public/tiles\" --tileSize 800 --gridWidth 47 --gridHeight 54 --subfolderSize 6 --format jpg --outDir \"public\"",
