@@ -8,6 +8,9 @@ export default function App() {
   const [preloadState, setPreloadState] = useState({ running: false, completed: 0, total: 0, failed: 0, error: '' })
   const confirmedRef = useRef(false)
   const manifestAbortRef = useRef(null)
+  const modalRef = useRef(null)
+  const preloadRunningRef = useRef(false)
+  preloadRunningRef.current = preloadState.running
 
   const loadManifest = async () => {
     if (manifest) return manifest
@@ -101,11 +104,50 @@ export default function App() {
     setPreloadState({ running: false, completed: 0, total: 0, failed: 0, error: '' })
   }
 
+  useEffect(() => {
+    if (!showPreloadModal) return undefined
+    const returnFocus = document.activeElement
+    const modal = modalRef.current
+    const focusableSelector = 'button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex="-1"])'
+    const getFocusable = () => Array.from(modal?.querySelectorAll(focusableSelector) || [])
+    getFocusable()[0]?.focus()
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && !preloadRunningRef.current) {
+        event.preventDefault()
+        skipPreload()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const focusable = getFocusable()
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus()
+    }
+  }, [showPreloadModal])
+
+  useEffect(() => {
+    if (showPreloadModal && preloadState.running) modalRef.current?.focus({ preventScroll: true })
+  }, [showPreloadModal, preloadState.running])
+
   return (
     <div id="mapContainer">
       {showPreloadModal && (
         <div className="modal-overlay" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="preloadTitle" aria-describedby="preloadDescription">
+          <div ref={modalRef} className="modal" role="dialog" aria-modal="true" aria-labelledby="preloadTitle" aria-describedby={preloadState.running ? undefined : 'preloadDescription'} aria-busy={preloadState.running} tabIndex="-1">
             <h2 id="preloadTitle">Preload Map for Offline/Low-Data</h2>
             {manifest && !preloadState.running && (
               <p id="preloadDescription">{cacheCurrent ? 'This map version is already cached. ' : ''}Downloading will store approximately <b>{totalMB} MB</b> ({manifest.totalFiles} files) on this device.</p>
@@ -120,8 +162,11 @@ export default function App() {
             ) : (
               <div className="preload-progress">
                 <div className="spinner" aria-hidden="true"></div>
-                <div className="progress-text" role="status" aria-live="polite">
-                  Caching {preloadState.completed} / {preloadState.total}
+                <div className="progress-copy">
+                  <div className="progress-text" role="status" aria-live="polite">
+                    Caching {preloadState.completed} / {preloadState.total}
+                  </div>
+                  <progress value={preloadState.completed} max={Math.max(1, preloadState.total)} aria-label="Offline map download progress" />
                 </div>
               </div>
             )}
@@ -136,7 +181,14 @@ export default function App() {
         </span>
       </button>
 
-      <div id="mapControls" className="controls-panel" aria-label="Map controls">
+      <aside id="mapControls" className="controls-panel" aria-label="Map tools">
+        <div className="controls-heading">
+          <div>
+            <span className="controls-eyebrow">SL2 world map</span>
+            <h2>Explore</h2>
+          </div>
+          <span className="shortcut-badge" aria-hidden="true">H</span>
+        </div>
         <div className="control-group search-group">
           <label className="visually-hidden" htmlFor="searchInput">Search locations</label>
           <input type="text" id="searchInput" placeholder="Search locations..." />
@@ -147,46 +199,61 @@ export default function App() {
           </button>
         </div>
         <div id="searchStatus" className="search-status" role="status" aria-live="polite"></div>
-        <div className="control-group zoom-group">
-          <button id="zoomIn" className="zoom-btn" aria-label="Zoom In">
-            <svg viewBox="0 0 24 24" width="16" height="16">
-              <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-            </svg>
-          </button>
-          <button id="zoomOut" className="zoom-btn" aria-label="Zoom Out">
-            <svg viewBox="0 0 24 24" width="16" height="16">
-              <path fill="currentColor" d="M19 13H5v-2h14v2z"/>
-            </svg>
-          </button>
-          <button id="resetView" className="reset-btn" aria-label="Reset View">
-            <svg viewBox="0 0 24 24" width="16" height="16">
-              <path fill="currentColor" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
-            </svg>
-          </button>
-        </div>
         <div className="control-group offline-group">
-          <button id="preloadAll" className="offline-btn" onClick={openPreload}>Offline Map</button>
+          <div className="offline-copy">
+            <strong>Offline access</strong>
+            <span>Save the full map only when you choose.</span>
+          </div>
+          <button id="preloadAll" className="offline-btn" onClick={openPreload}>Manage</button>
         </div>
+        <details className="keyboard-help">
+          <summary>Keyboard help</summary>
+          <div id="keyboardHelpText" className="shortcut-grid">
+            <span>Pan</span><kbd>Arrow keys</kbd>
+            <span>Zoom</span><kbd>+ / −</kbd>
+            <span>Reset</span><kbd>0</kbd>
+            <span>Tools</span><kbd>H or Space</kbd>
+            <span>Close</span><kbd>Esc</kbd>
+          </div>
+        </details>
         {import.meta.env.DEV && <div className="control-group debug-group">
           <button id="debugWorldMap" className="debug-btn">Debug WM</button>
           <button id="toggleDebug" className="debug-mode-btn">Debug Mode</button>
         </div>}
+      </aside>
+
+      <div className="view-controls" aria-label="Map view controls">
+          <button id="zoomIn" className="zoom-btn" aria-label="Zoom in">
+            <svg viewBox="0 0 24 24" width="16" height="16">
+              <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
+          </button>
+          <button id="zoomOut" className="zoom-btn" aria-label="Zoom out">
+            <svg viewBox="0 0 24 24" width="16" height="16">
+              <path fill="currentColor" d="M19 13H5v-2h14v2z"/>
+            </svg>
+          </button>
+          <button id="resetView" className="reset-btn" aria-label="Reset view">
+            <svg viewBox="0 0 24 24" width="16" height="16">
+              <path fill="currentColor" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+            </svg>
+          </button>
       </div>
 
-      <div id="mapCanvas" role="application" aria-label="Interactive SL2 world map" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0" tabIndex="0">
+      <div id="mapCanvas" role="application" aria-label="Interactive SL2 world map" aria-describedby="keyboardHelpText" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - 0" tabIndex="0">
         <div id="mapGrid"></div>
         <div id="pinLayer"></div>
       </div>
 
       <div id="loadingIndicator" role="status" aria-live="polite">Loading...</div>
 
-      <div id="locationInfo" className="hidden" aria-live="polite">
+      <section id="locationInfo" className="hidden" role="region" aria-labelledby="locationName" aria-hidden="true">
         <div id="locationContent">
           <button id="closeInfo" aria-label="Close location details">&times;</button>
-          <h3 id="locationName"></h3>
+          <h3 id="locationName" tabIndex="-1"></h3>
           <p id="locationDescription"></p>
         </div>
-      </div>
+      </section>
     </div>
   )
 }

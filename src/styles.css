@@ -1,4 +1,18 @@
 /* Reset and base styles */
+:root {
+    color-scheme: dark;
+    --ui-surface: rgba(12, 16, 22, 0.94);
+    --ui-surface-soft: rgba(24, 31, 42, 0.9);
+    --ui-border: rgba(255, 255, 255, 0.14);
+    --ui-muted: #aeb8c7;
+    --ui-accent: #76b7ff;
+    --ui-highlight: #ffd45c;
+    --safe-top: max(12px, env(safe-area-inset-top));
+    --safe-right: max(12px, env(safe-area-inset-right));
+    --safe-bottom: max(12px, env(safe-area-inset-bottom));
+    --safe-left: max(12px, env(safe-area-inset-left));
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -17,27 +31,30 @@ body {
     position: relative;
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
+    isolation: isolate;
 }
 
 /* Toggle button for controls */
 .toggle-btn {
     position: fixed;
-    top: 20px;
-    left: 20px;
+    top: var(--safe-top);
+    left: var(--safe-left);
     z-index: 1001;
     width: 48px;
     height: 48px;
-    background: rgba(0, 0, 0, 0.9);
-    border: none;
-    border-radius: 12px;
+    padding: 0;
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    border-radius: 14px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     backdrop-filter: blur(10px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    transition: all 0.3s ease;
+    transition: background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .toggle-btn:hover {
@@ -61,7 +78,7 @@ body {
     height: 2px;
     background: #fff;
     border-radius: 1px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s ease;
 }
 
 .toggle-btn.active .hamburger-icon span:nth-child(1) {
@@ -80,40 +97,83 @@ body {
 /* Controls panel */
 .controls-panel {
     position: fixed;
-    top: 20px;
-    left: 80px;
+    top: var(--safe-top);
+    left: calc(var(--safe-left) + 60px);
     z-index: 1000;
+    width: min(340px, calc(100vw - var(--safe-left) - var(--safe-right) - 60px));
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
     display: flex;
     flex-direction: column;
     gap: 12px;
-    transform: translateX(-120%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    border-radius: 16px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(18px);
+    transform: translateX(-14px) scale(0.98);
+    transform-origin: top left;
+    transition: transform 0.22s ease, opacity 0.18s ease, visibility 0.22s;
     opacity: 0;
+    visibility: hidden;
     pointer-events: none;
 }
 
 .controls-panel.visible {
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
     opacity: 1;
+    visibility: visible;
     pointer-events: auto;
+}
+
+.controls-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.controls-heading h2 {
+    margin-top: 2px;
+    font-size: 22px;
+    line-height: 1.1;
+}
+
+.controls-eyebrow {
+    color: var(--ui-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.shortcut-badge,
+kbd {
+    border: 1px solid var(--ui-border);
+    border-bottom-width: 2px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font: 600 11px/1 system-ui, sans-serif;
+}
+
+.shortcut-badge {
+    padding: 7px 9px;
 }
 
 .control-group {
     display: flex;
     gap: 8px;
-    background: rgba(0, 0, 0, 0.9);
-    padding: 12px;
-    border-radius: 12px;
-    backdrop-filter: blur(10px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .search-group {
-    min-width: 280px;
+    width: 100%;
 }
 
 #searchInput {
+    min-width: 0;
     flex: 1;
     padding: 12px 16px;
     border: none;
@@ -123,7 +183,7 @@ body {
     font-size: 14px;
     font-weight: 500;
     outline: none;
-    transition: all 0.2s ease;
+    transition: background-color 0.18s ease, box-shadow 0.18s ease;
 }
 
 #searchInput:focus {
@@ -144,7 +204,7 @@ button {
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
-    transition: all 0.2s ease;
+    transition: background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -247,17 +307,94 @@ button svg {
     white-space: nowrap;
 }
 
+.offline-group {
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 12px;
+    border: 1px solid var(--ui-border);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.offline-copy {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.offline-copy strong {
+    font-size: 13px;
+}
+
+.offline-copy span {
+    color: var(--ui-muted);
+    font-size: 11px;
+    line-height: 1.3;
+}
+
+.keyboard-help {
+    border-top: 1px solid var(--ui-border);
+    padding-top: 10px;
+}
+
+.keyboard-help summary {
+    color: var(--ui-muted);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.keyboard-help[open] summary {
+    margin-bottom: 10px;
+    color: #fff;
+}
+
+.shortcut-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 8px 12px;
+    color: var(--ui-muted);
+    font-size: 12px;
+}
+
+.shortcut-grid kbd {
+    padding: 5px 7px;
+    text-align: center;
+}
+
+.view-controls {
+    position: fixed;
+    right: var(--safe-right);
+    bottom: var(--safe-bottom);
+    z-index: 950;
+    display: grid;
+    gap: 6px;
+    padding: 6px;
+    border: 1px solid var(--ui-border);
+    border-radius: 14px;
+    background: var(--ui-surface);
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.38);
+    backdrop-filter: blur(14px);
+}
+
+.view-controls button {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    padding: 0;
+}
+
 .offline-btn:hover {
     background: #284f7a;
 }
 
 .search-status {
-    max-width: 320px;
-    padding: 8px 12px;
+    width: 100%;
+    padding: 2px 2px 0;
     border-radius: 8px;
-    background: rgba(0, 0, 0, 0.9);
-    color: #fff;
-    font-size: 13px;
+    color: var(--ui-muted);
+    font-size: 12px;
     line-height: 1.35;
 }
 
@@ -275,10 +412,6 @@ button svg {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
-}
-
-#toggleDebug {
-    transition: all 0.3s ease;
 }
 
 #toggleDebug:hover {
@@ -417,7 +550,7 @@ button svg {
     transform: rotate(-45deg) translate(-50%, -50%);
     cursor: pointer;
     pointer-events: auto;
-    transition: all 0.3s ease;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
     min-width: 30px;
     min-height: 30px;
@@ -441,6 +574,11 @@ button svg {
     box-shadow: 0 4px 15px rgba(255, 68, 68, 0.5);
 }
 
+.map-pin:focus-visible,
+.map-pin.selected {
+    box-shadow: 0 0 0 4px rgba(255, 212, 92, 0.5), 0 5px 18px rgba(0, 0, 0, 0.5);
+}
+
 .map-pin.important {
     background: #ffd700;
 }
@@ -451,23 +589,24 @@ button svg {
 
 /* Location info panel */
 #locationInfo {
-    position: absolute;
-    bottom: 20px;
-    left: 20px;
-    right: 20px;
-    max-width: 400px;
-    background: rgba(0, 0, 0, 0.9);
-    border-radius: 8px;
-    padding: 20px;
-    backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: fixed;
+    bottom: var(--safe-bottom);
+    left: var(--safe-left);
+    width: min(420px, calc(100vw - var(--safe-left) - var(--safe-right) - 64px));
+    background: var(--ui-surface);
+    border-radius: 16px;
+    padding: 18px 52px 18px 18px;
+    backdrop-filter: blur(18px);
+    border: 1px solid var(--ui-border);
     z-index: 1001;
-    transition: transform 0.3s ease, opacity 0.3s ease;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.42);
+    transition: transform 0.22s ease, opacity 0.18s ease, visibility 0.22s;
 }
 
 #locationInfo.hidden {
-    transform: translateY(100%);
+    transform: translateY(calc(100% + var(--safe-bottom)));
     opacity: 0;
+    visibility: hidden;
     pointer-events: none;
 }
 
@@ -484,11 +623,14 @@ button svg {
 }
 
 #locationName {
-    margin-bottom: 10px;
-    color: #ffd700;
+    margin-bottom: 8px;
+    color: var(--ui-highlight);
+    font-size: clamp(18px, 2vw, 22px);
 }
 
 #locationDescription {
+    max-height: min(32vh, 220px);
+    overflow-y: auto;
     line-height: 1.5;
     opacity: 0.9;
 }
@@ -497,7 +639,7 @@ button svg {
 #loadingIndicator {
     position: absolute;
     top: auto;
-    bottom: 20px;
+    bottom: var(--safe-bottom);
     left: 50%;
     transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.8);
@@ -518,7 +660,9 @@ button svg {
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.6);
+    padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+    background: rgba(0,0,0,0.72);
+    backdrop-filter: blur(5px);
     z-index: 3000;
     display: flex;
     align-items: center;
@@ -526,11 +670,13 @@ button svg {
 }
 
 .modal {
-    width: min(520px, 92vw);
-    background: rgba(0,0,0,0.92);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 12px;
-    padding: 20px;
+    width: min(520px, 100%);
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
+    overflow-y: auto;
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    border-radius: 16px;
+    padding: clamp(18px, 4vw, 26px);
     box-shadow: 0 8px 30px rgba(0,0,0,0.5);
 }
 
@@ -550,6 +696,7 @@ button svg {
 
 .modal-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 10px;
 }
 
@@ -557,6 +704,17 @@ button svg {
     display: flex;
     gap: 12px;
     align-items: center;
+}
+
+.progress-copy {
+    display: grid;
+    flex: 1;
+    gap: 8px;
+}
+
+.progress-copy progress {
+    width: 100%;
+    accent-color: var(--ui-accent);
 }
 
 .spinner {
@@ -575,38 +733,35 @@ button svg {
 /* Responsive design */
 @media (max-width: 768px) {
     .toggle-btn {
-        top: 15px;
-        left: 15px;
         width: 44px;
         height: 44px;
     }
 
     .controls-panel {
-        position: fixed;
-        top: 15px;
-        left: 70px;
-        right: 15px;
-        max-width: none;
-        flex-direction: column;
-        gap: 8px;
+        top: calc(var(--safe-top) + 54px);
+        left: var(--safe-left);
+        right: var(--safe-right);
+        width: auto;
+        max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 66px);
+        padding: 14px;
+        transform: translateY(-12px) scale(0.98);
+        transform-origin: top center;
+    }
+
+    .controls-panel.visible {
+        transform: translateY(0) scale(1);
     }
 
     .control-group {
-        padding: 10px;
-        border-radius: 10px;
+        gap: 8px;
     }
 
     .search-group {
-        min-width: auto;
         width: 100%;
     }
 
-    .zoom-group {
-        justify-content: center;
-    }
-
     .debug-group {
-        flex-direction: column;
+        flex-wrap: wrap;
         gap: 8px;
     }
 
@@ -616,46 +771,96 @@ button svg {
     }
 
     button {
-        font-size: 16px;
+        font-size: 15px;
         min-height: 44px;
         touch-action: manipulation;
     }
 
-    .zoom-btn {
-        min-width: 50px;
-        height: 50px;
+    .view-controls {
+        gap: 5px;
+        padding: 5px;
+    }
+
+    .view-controls button {
+        width: 48px;
+        height: 48px;
     }
 
     #locationInfo {
-        left: 15px;
-        right: 15px;
-        bottom: 15px;
-        max-width: none;
+        left: var(--safe-left);
+        width: calc(100vw - var(--safe-left) - var(--safe-right) - 62px);
+        padding: 16px 48px 16px 16px;
+    }
+
+    #locationDescription {
+        max-height: min(25vh, 180px);
     }
 }
 
 @media (max-width: 480px) {
-    .controls-panel {
-        left: 60px;
-        right: 10px;
-    }
-
-    .control-group {
-        padding: 8px;
-    }
-
-    .zoom-group {
-        flex-wrap: wrap;
-        justify-content: space-between;
-    }
-
-    .debug-group {
-        gap: 6px;
+    .controls-heading h2 {
+        font-size: 20px;
     }
 
     .debug-btn, .debug-mode-btn {
         font-size: 12px;
         padding: 8px 12px;
+    }
+
+    .offline-group {
+        align-items: flex-start;
+    }
+
+    .offline-copy span {
+        max-width: 22ch;
+    }
+
+    .modal-actions > button {
+        flex: 1 1 100%;
+    }
+}
+
+@media (max-height: 540px) and (orientation: landscape) {
+    .controls-panel {
+        top: var(--safe-top);
+        left: calc(var(--safe-left) + 54px);
+        right: auto;
+        bottom: var(--safe-bottom);
+        width: min(360px, calc(55vw - var(--safe-left)));
+        max-height: none;
+        padding: 12px;
+        gap: 9px;
+        transform: translateX(-12px) scale(0.98);
+        transform-origin: top left;
+    }
+
+    .controls-panel.visible {
+        transform: translateX(0) scale(1);
+    }
+
+    .controls-heading h2 {
+        font-size: 18px;
+    }
+
+    .offline-copy span,
+    .keyboard-help {
+        display: none;
+    }
+
+    .view-controls {
+        top: var(--safe-top);
+        bottom: auto;
+    }
+
+    #locationInfo {
+        left: auto;
+        right: calc(var(--safe-right) + 60px);
+        bottom: var(--safe-bottom);
+        width: min(390px, 43vw);
+    }
+
+    #locationDescription {
+        max-height: 32vh;
     }
 }
 
@@ -672,20 +877,21 @@ button svg {
 
 /* Touch device optimizations */
 @media (hover: none) and (pointer: coarse) {
-    .controls-panel {
-        transform: translateX(-120%);
-        opacity: 0;
-        pointer-events: none;
-    }
-    
     button:hover {
         transform: none;
         box-shadow: none;
     }
     
     button:active {
-        transform: scale(0.95);
-        background: rgba(255, 255, 255, 0.1);
+        transform: scale(0.97);
+        filter: brightness(0.88);
+    }
+
+    .map-pin {
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        min-height: 38px;
     }
 }
 
@@ -694,64 +900,40 @@ button svg {
     display: none;
 }
 
-/* Animation keyframes */
-@keyframes fadeIn {
-    from { 
-        opacity: 0; 
-        transform: translateY(10px);
-    }
-    to { 
-        opacity: 1; 
-        transform: translateY(0);
-    }
-}
-
-@keyframes slideInLeft {
-    from {
-        transform: translateX(-100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-@keyframes pulse {
-    0%, 100% {
-        transform: scale(1);
-    }
-    50% {
-        transform: scale(1.05);
-    }
-}
-
-.fade-in {
-    animation: fadeIn 0.5s ease-out;
-}
-
-.slide-in-left {
-    animation: slideInLeft 0.3s ease-out;
-}
-
-/* Pulse animation for toggle button when controls are available */
-.toggle-btn.has-content {
-    animation: pulse 2s infinite;
-}
-
-/* Page load animations */
-body {
-    animation: fadeIn 0.3s ease-out;
-}
-
-.toggle-btn {
-    animation: slideInLeft 0.5s ease-out 0.2s both;
-}
-
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
+    }
+}
+
+@media (forced-colors: active) {
+    .toggle-btn,
+    .controls-panel,
+    .view-controls,
+    #locationInfo,
+    .modal,
+    .offline-group,
+    .shortcut-badge,
+    kbd {
+        border: 1px solid ButtonText;
+        background: Canvas;
+        color: CanvasText;
+        backdrop-filter: none;
+    }
+
+    button,
+    input,
+    summary,
+    .map-pin {
+        forced-color-adjust: auto;
+    }
+
+    .controls-eyebrow,
+    .offline-copy span,
+    .search-status,
+    .shortcut-grid {
+        color: CanvasText;
     }
 }
