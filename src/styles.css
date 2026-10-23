@@ -126,6 +126,7 @@ body {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
+    transition: transform 0.22s ease, opacity 0.18s ease, visibility 0s;
 }
 
 .controls-heading {
@@ -279,29 +280,6 @@ button svg {
     background: #138496;
 }
 
-.debug-btn {
-    background: #ff6b35;
-    white-space: nowrap;
-}
-
-.debug-btn:hover {
-    background: #e55a2b;
-}
-
-.debug-mode-btn {
-    background: #9b59b6;
-    white-space: nowrap;
-}
-
-.debug-mode-btn:hover {
-    background: #8e44ad;
-}
-
-.debug-mode-btn.active {
-    background: #e74c3c;
-    box-shadow: 0 0 15px rgba(231, 76, 60, 0.4);
-}
-
 .offline-btn {
     background: #365f8d;
     white-space: nowrap;
@@ -414,177 +392,187 @@ button svg {
     border: 0;
 }
 
-#toggleDebug:hover {
-    transform: scale(1.05);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+.search-results {
+    display: grid;
+    gap: 4px;
+    list-style: none;
 }
 
-#zoomIn, #zoomOut {
-    width: 44px;
-    height: 44px;
-    font-size: 18px;
-    font-weight: bold;
+.search-result {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.06);
+    text-align: left;
 }
 
-/* Map canvas */
+.search-result:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.result-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.result-type,
+.location-type {
+    color: var(--ui-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.result-dot {
+    width: 10px;
+    height: 10px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--pin-color);
+}
+
+.type-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    border: 0;
+}
+
+.type-filters legend {
+    margin-bottom: 8px;
+    color: var(--ui-muted);
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.filter-chip {
+    min-height: 36px;
+    padding: 6px 12px;
+    border: 1px solid var(--pin-color);
+    border-radius: 999px;
+    background: transparent;
+    font-size: 13px;
+    text-transform: capitalize;
+}
+
+.filter-chip:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.filter-chip[aria-pressed="true"] {
+    background: var(--pin-color);
+    color: #111;
+}
+
+/* Map */
 #mapCanvas {
-    position: relative;
     width: 100%;
     height: 100%;
-    overflow: hidden;
-    cursor: grab;
+    background: #000;
+    font: inherit;
+    touch-action: none;
 }
 
-#mapCanvas.dragging {
-    cursor: grabbing;
+.blank-tile {
+    background: #000;
 }
 
-#mapGrid {
-    position: absolute;
-    top: 0;
-    left: 0;
-    transform-origin: 0 0;
-    transition: transform 0.1s ease-out;
-    will-change: transform;
-}
-
-/* Tile styles for large images */
-.map-tile {
-    position: absolute;
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    transition: opacity 0.2s ease-in-out;
-    image-rendering: -webkit-optimize-contrast;
-    image-rendering: -moz-crisp-edges;
+#mapCanvas.overzoomed .leaflet-tile {
     image-rendering: pixelated;
-    backface-visibility: hidden;
-    opacity: 0;
 }
 
-/* World map image */
-.world-map-image {
-    position: absolute;
-    top: 0;
-    left: 0;
-    object-fit: cover;
-    transition: opacity 0.3s ease;
-    image-rendering: -webkit-optimize-contrast;
-    image-rendering: -moz-crisp-edges;
-    image-rendering: pixelated;
-    will-change: transform;
-    backface-visibility: hidden;
-    z-index: 1;
+.type-town { --pin-color: #ff4444; }
+.type-nation { --pin-color: #ffd45c; }
+.type-landmark { --pin-color: #4aa3ff; }
+.type-dungeon { --pin-color: #a66bff; }
+
+.map-marker {
+    outline: none;
 }
 
-.map-tile.loading {
-    background: linear-gradient(45deg, #2a2a2a 25%, #333 25%, #333 50%, #2a2a2a 50%, #2a2a2a 75%, #333 75%);
-    background-size: 40px 40px;
-    animation: loading-stripes 3s linear infinite;
-    opacity: 0.3;
-}
-
-.map-tile.loaded {
-    opacity: 1;
-}
-
-.map-tile.error {
-    background-color: #2a2a2a;
-    border: 1px dashed #ff6b6b;
-    opacity: 0.4;
-    position: relative;
-}
-
-.map-tile.error::after {
-    content: "⚠";
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: #ff6b6b;
-    font-size: 24px;
-    font-weight: bold;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-/* Show error warning icons only in debug mode */
-.debug-mode .map-tile.error::after {
-    opacity: 1;
-}
-
-.map-tile.missing {
-    background-color: #000000 !important;
-    background-image: none !important;
-    opacity: 1;
-    border: none;
-}
-
-.map-tile.unloaded {
-    opacity: 0;
-}
-
-@keyframes loading-stripes {
-    0% { background-position: 0 0; }
-    100% { background-position: 40px 40px; }
-}
-
-/* Pin layer */
-#pinLayer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    pointer-events: none;
-    z-index: 100;
-}
-
-/* Map pins */
 .map-pin {
     position: absolute;
-    width: 30px;
-    height: 30px;
-    background: #ff4444;
+    inset: 0;
+    background: var(--pin-color, #ff4444);
     border: 3px solid white;
     border-radius: 50% 50% 50% 0;
-    transform: rotate(-45deg) translate(-50%, -50%);
-    cursor: pointer;
-    pointer-events: auto;
-    transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+    transform: rotate(-45deg);
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-    min-width: 30px;
-    min-height: 30px;
-    padding: 0;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .map-pin::after {
     content: '';
     position: absolute;
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     background: white;
     border-radius: 50%;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%) rotate(45deg);
+    transform: translate(-50%, -50%);
 }
 
-.map-pin:hover {
-    transform: rotate(-45deg) translate(-50%, -50%) scale(1.2);
-    box-shadow: 0 4px 15px rgba(255, 68, 68, 0.5);
+.map-marker:hover .map-pin {
+    transform: rotate(-45deg) scale(1.12);
 }
 
-.map-pin:focus-visible,
-.map-pin.selected {
-    box-shadow: 0 0 0 4px rgba(255, 212, 92, 0.5), 0 5px 18px rgba(0, 0, 0, 0.5);
+.map-marker:focus-visible .map-pin,
+.map-marker.selected .map-pin {
+    box-shadow: 0 0 0 4px rgba(255, 212, 92, 0.6), 0 5px 18px rgba(0, 0, 0, 0.5);
 }
 
-.map-pin.important {
-    background: #ffd700;
+.leaflet-tooltip {
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    background: var(--ui-surface);
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 
-.map-pin.quest {
-    background: #00ff88;
+.leaflet-tooltip-top::before {
+    border-top-color: var(--ui-surface);
+}
+
+.point-popup-wrapper .leaflet-popup-content-wrapper,
+.point-popup-wrapper .leaflet-popup-tip {
+    background: var(--ui-surface);
+    color: #fff;
+}
+
+.point-popup {
+    display: grid;
+    gap: 8px;
+    min-width: 200px;
+}
+
+.point-coords {
+    color: var(--ui-highlight);
+    font-family: monospace;
+    font-size: 13px;
+}
+
+.location-template {
+    width: 100%;
+    height: 64px;
+    padding: 6px;
+    border: 1px solid var(--ui-border);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font: 11px monospace;
+    resize: vertical;
+}
+
+.dev-link {
+    color: var(--ui-accent);
+    font-size: 13px;
 }
 
 /* Location info panel */
@@ -600,7 +588,7 @@ button svg {
     border: 1px solid var(--ui-border);
     z-index: 1001;
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.42);
-    transition: transform 0.22s ease, opacity 0.18s ease, visibility 0.22s;
+    transition: transform 0.22s ease, opacity 0.18s ease, visibility 0s;
 }
 
 #locationInfo.hidden {
@@ -608,6 +596,7 @@ button svg {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
+    transition: transform 0.22s ease, opacity 0.18s ease, visibility 0.22s;
 }
 
 #closeInfo {
@@ -626,6 +615,29 @@ button svg {
     margin-bottom: 8px;
     color: var(--ui-highlight);
     font-size: clamp(18px, 2vw, 22px);
+}
+
+#locationDescription.muted {
+    color: var(--ui-muted);
+    font-style: italic;
+}
+
+.location-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.location-actions button {
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+.copy-status {
+    color: var(--ui-muted);
+    font-size: 12px;
 }
 
 #locationDescription {
@@ -654,6 +666,31 @@ button svg {
 
 #loadingIndicator.visible {
     display: block;
+}
+
+.update-banner {
+    position: absolute;
+    top: var(--safe-top);
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100vw - var(--safe-left) - var(--safe-right));
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px 12px;
+    padding: 8px 12px;
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 2500;
+}
+
+.update-banner button {
+    padding: 6px 12px;
+    font-size: 13px;
 }
 
 /* Preload modal */
@@ -760,11 +797,6 @@ button svg {
         width: 100%;
     }
 
-    .debug-group {
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-
     #searchInput {
         font-size: 16px; /* Prevent zoom on iOS */
         min-height: 44px;
@@ -800,11 +832,6 @@ button svg {
 @media (max-width: 480px) {
     .controls-heading h2 {
         font-size: 20px;
-    }
-
-    .debug-btn, .debug-mode-btn {
-        font-size: 12px;
-        padding: 8px 12px;
     }
 
     .offline-group {
@@ -864,17 +891,6 @@ button svg {
     }
 }
 
-#mapGrid {
-    backface-visibility: hidden;
-    transform: translateZ(0);
-}
-
-/* Smooth scrolling for touch devices */
-#mapCanvas {
-    -webkit-overflow-scrolling: touch;
-    touch-action: none;
-}
-
 /* Touch device optimizations */
 @media (hover: none) and (pointer: coarse) {
     button:hover {
@@ -887,12 +903,6 @@ button svg {
         filter: brightness(0.88);
     }
 
-    .map-pin {
-        width: 38px;
-        height: 38px;
-        min-width: 38px;
-        min-height: 38px;
-    }
 }
 
 /* Hide scrollbars */
@@ -926,7 +936,8 @@ button svg {
     button,
     input,
     summary,
-    .map-pin {
+    .map-pin,
+    .filter-chip {
         forced-color-adjust: auto;
     }
 

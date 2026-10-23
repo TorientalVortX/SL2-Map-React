@@ -1,101 +1,63 @@
 # SL2 Map (React)
 
-A React + Vite remake of the SL2 interactive world map.
+An interactive SL2 world map built with React, Vite and Leaflet.
 
-## Deploy to Cloudflare Pages (GitHub)
+## How the map is served
 
-This repository is set up so only the proper production build (`dist/`) is deployed via GitHub Actions, while large generated assets and dev outputs remain out of Git history.
+- Source tiles live in `map-source/tiles/subfolder_{R}_{C}/tile_{r}_{c}.{png,webp,jpg}` (800×800, 6×6 tiles per subfolder).
+- `npm run tiles` (`scripts/build-tiles.js`) turns them into a zoom pyramid at `public/tiles/{version}/{z}/{x}/{y}.webp`.
+  Each level halves the one above it, built depth-first from the source tiles so memory stays small; no full-size stitch is ever made.
+- Fully black tiles are skipped. Their positions are stored as bitsets in `src/generated/tile-index.json`, and the client draws them without a request.
+- The tile path includes a content hash, so `/tiles/*` can be cached as immutable and a rebuild never serves stale tiles.
+- The same script writes `public/cache-manifest.json` / `cache-version.json` for the opt-in offline download.
 
-### What’s included
-- `.gitignore` excludes `node_modules/`, `dist/`, `public/tiles/`, and `public/cache-manifest.json`.
-- GitHub Actions workflow at `.github/workflows/deploy-cloudflare-pages.yml` builds the site and deploys `dist/` to Cloudflare Pages.
+All of `public/tiles/`, `src/generated/` and the cache manifests are generated and gitignored. `npm run dev` and `npm run build` run `npm run tiles` first; it skips the work when the source tiles have not changed.
 
-### Setup Steps
-1. Create a Cloudflare Pages project named `sl2-map-react` (or change `projectName` in the workflow).
-2. In your GitHub repository, add secrets:
-	- `CLOUDFLARE_API_TOKEN`: Token with Pages write permissions.
-	- `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare account ID.
-3. Push to `main` to trigger deployment, or run the workflow manually.
+Options: `node scripts/build-tiles.js --force --quality 75 --overview-quality 65` (`--quality` is the full-resolution level, `--overview-quality` the zoomed-out levels).
 
-### Local Development
-```powershell
-npm run dev
+## Updating the map from region images
+
+The current region art (4800×4800 PNGs, one 6×6 tile block each, plus a few odd-sized pieces) lives in the shared Google Drive folder. Those originals stay out of git.
+
+1. `npm run regions:fetch`: download the PNGs into `map-source/regions/` (gitignored) and record their Drive ids and dates in `map-source/regions.json`.
+2. `npm run regions:place`: guess each region's position by matching it against `map-source/reference.webp` (the previous world map at 1/16 scale) and write `map-source/layout.json`.
+   Well-matched blocks snap to the detected block grid. Weak guesses are flagged `review`. Older overlapping versions of the same BTT number are disabled. Pass `--all` to re-guess everything.
+3. `npm run dev`, open `http://localhost:5173/?arrange` (or "Arrange regions" in the panel), and fix the layout: drag regions, toggle versions on or off, and use **Top** to change which overlapping region is drawn above.
+   Snap to the block grid, 48px cells, 800px tiles or 1px. Arrow keys nudge the selected region.
+4. **Save & rebuild map** writes the layout, runs `npm run regions:compose` (regions → `map-source/tiles`) and rebuilds the pyramid. Check the result at `/`.
+
+`map-source/layout.json` and the composed `map-source/tiles` are what get committed. `compose-regions.js --out <dir>` writes somewhere else to preview without replacing the current tiles.
+
+## Locations
+
+Pins come from `src/data/locations.json`:
+
+```json
+{ "id": 1756967094317, "name": "Telegrad", "x": 33048, "y": 19279, "type": "nation", "description": "..." }
 ```
 
-### Build Locally
-```powershell
-npm run build
-```
+`x`/`y` are pixels on the full-resolution map. `type` sets the pin colour (`nation`, `town`, `landmark`, `dungeon`) and appears as a filter in the panel once there is more than one type.
+In `npm run dev`, right-click (or long-press) the map to get a ready-made entry for that spot.
 
-The production output is in `dist/` and is what gets deployed.
+## Sharing
+
+The URL hash tracks the view, e.g. `#x=33048&y=19279&z=5.50&loc=1756967094317`. Opening such a link restores the view and the selected location.
+Right-click / long-press any spot, or use **Copy link** on a location card.
 
 ## Scripts
 
-- `npm run dev`: Start the dev server at `http://localhost:5173/`
-- `npm run build`: Build for production
-- `npm run preview`: Preview the production build
-
-## Project Structure
-
-- `public/tiles/`: Static map tiles served at `/tiles/...`
-- `src/lib/GameMap.js`: Ported GameMap class, instantiated by `App` on mount
-- `src/App.jsx`: React component rendering the map UI with matching element IDs
-- `src/styles.css`: Original styling moved into the React app
-
-## Notes
-
-- World map images (`World_Map_Optimized_*.jpg`) are optional. Place them in `public/` if available, or the app will use tiles-only.
-- If you change asset paths, update `tilePath` and world map paths in `src/lib/GameMap.js`.
-
-## Quick Start
+- `npm run dev`: dev server at `http://localhost:5173/`
+- `npm run build`: production build into `dist/`
+- `npm run preview`: serve the production build
+- `npm test`: unit tests (`node --test`)
+- `npm run tiles`: build the tile pyramid
+- `npm run slice-map`: slice a single large image into `map-source/tiles` (set `MAP_INPUT` to the image path)
 
 ```powershell
-Push-Location "c:\Users\chris\Desktop\Code Projects\SL2-Map\react-map"; npm install; npm run dev
+$env:MAP_INPUT = "C:\path\to\mapfile.png"; npm run slice-map
 ```
 
-## One-time Tile Slicing
+## Deploy to Cloudflare Pages
 
-Use the provided script to slice a large `mapfile.png` into optimized 800×800 tiles organized into 6×6 subfolders (`subfolder_R_C/tile_r_c.jpg`) matching `src/lib/GameMap.js`.
-
-- Install dependency:
-
-```powershell
-npm install sharp --save-dev
-```
-
-- Run the slicer (replace the input path):
-
-```powershell
-$env:MAP_INPUT = "c:\\Users\\chris\\Desktop\\Code Projects\\SL2-Map-React\\public\\mapfile.png"; npm run slice-map
-```
-
-Alternatively, call directly:
-
-```powershell
-node scripts/slice-map.js --input "c:\\Users\\chris\\Desktop\\Code Projects\\SL2-Map-React\\public\\mapfile.png" --outDir "public/tiles" --tileSize 800 --subfolderSize 6 --quality 75
-```
-
-Notes:
-- The script auto-derives grid size from the image and pads edges when needed.
-- Output format defaults to JPEG with `mozjpeg`, progressive, and quality 75 for fast interactive loads.
-- Ensure the resulting folders appear under `public/tiles/` as `subfolder_{R}_{C}/tile_{r}_{c}.jpg`.
-
-## Stitch World Maps from Tiles
-
-Generate multi-resolution world map images directly from the tiles:
-
-```powershell
-npm run stitch-worldmaps
-```
-
-This produces:
-- `public/World_Map_Optimized_tiny.jpg` (896×1024)
-- `public/World_Map_Optimized_small.jpg` (1792×2048)
-- `public/World_Map_Optimized_medium.jpg` (3584×4096)
-- `public/World_Map_Optimized_large.jpg` (6720×7680)
-
-Config matches `src/lib/GameMap.js`. Override defaults if needed:
-
-```powershell
-node scripts/stitch-worldmaps.js --tilesDir "public/tiles" --tileSize 800 --gridWidth 42 --gridHeight 48 --subfolderSize 6 --format jpg --outDir "public"
-```
+Build command `npm run build`, output directory `dist`. The build generates the tiles (about 30 s), so dev dependencies (`sharp`) must be installed during the build.
+`public/_headers` sets long-lived caching for `/tiles/*` and `/assets/*`.

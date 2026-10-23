@@ -1,0 +1,14 @@
+[
+  {
+    "id": 1756967094317,
+    "name": "Telegrad",
+    "x": 33048,
+    "y": 19279,
+    "type": "nation",
+    "description": "The East, The Evergreens, The Valley of a Thousand Homesteads. Fed by the Halard Reservoir and the Central Lake, the Federation of Telegrad has grown beyond its valley to become a large and expansive place, considered by many to be an idyllic paradise. No merchant schemes, no draft, no existential threat that looms in the outskirts."
+  },
+  { "id": 1756967284265, "name": "Duyuei", "x": 21831, "y": 28405, "type": "nation", "description": "" },
+  { "id": 1756967324302, "name": "Geladyne", "x": 12510, "y": 18866, "type": "nation", "description": "" },
+  { "id": 1756967349665, "name": "Meiaquar", "x": 22771, "y": 10027, "type": "nation", "description": "" },
+  { "id": 1756967393658, "name": "Yokoshura", "x": 9795, "y": 30658, "type": "nation", "description": "" }
+]

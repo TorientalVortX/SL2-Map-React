@@ -1,10 +1,10 @@
 /*
 One-time slicer for a large world map image into optimized tiles.
 Reads an input image and writes 800x800 JPEG tiles into 6x6 subfolders
-like `public/tiles/subfolder_{R}_{C}/tile_{r}_{c}.jpg` to match GameMap.js.
+like `map-source/tiles/subfolder_{R}_{C}/tile_{r}_{c}.jpg`, the input for build-tiles.js.
 
 Usage:
-  node scripts/slice-map.js --input "c:/path/to/mapfile.png" --outDir "public/tiles" --tileSize 800 --subfolderSize 6 --quality 75
+  node scripts/slice-map.js --input "c:/path/to/mapfile.png" --outDir "map-source/tiles" --tileSize 800 --subfolderSize 6 --quality 75
 
 Notes:
 - If the image dimensions are not exact multiples of tileSize, the script will pad the edges.
@@ -48,7 +48,7 @@ async function ensureDir(dir) {
 async function main() {
   const opts = parseArgs();
   const input = opts.input || opts.i;
-  const outDir = opts.outDir || path.join('public', 'tiles');
+  const outDir = opts.outDir || path.join('map-source', 'tiles');
   const tileSize = Number(opts.tileSize || 800);
   const subfolderSize = Number(opts.subfolderSize || 6);
   const quality = Number(opts.quality || 75);
