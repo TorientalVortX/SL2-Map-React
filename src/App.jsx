@@ -3,6 +3,7 @@ import MapView from './components/MapView.jsx'
 import ControlsPanel from './components/ControlsPanel.jsx'
 import LocationCard from './components/LocationCard.jsx'
 import OfflineModal from './components/OfflineModal.jsx'
+import UpdateBanner from './components/UpdateBanner.jsx'
 import { formatViewHash, parseViewHash } from './lib/viewHash.js'
 import { searchLocations } from './lib/searchLocations.js'
 import tileIndex from './generated/tile-index.json'
@@ -164,6 +165,7 @@ export default function App() {
   return (
     <div id="mapContainer" className={panelOpen ? 'controls-open' : ''}>
       {offlineOpen && <OfflineModal onClose={closeOffline} />}
+      <UpdateBanner />
       <button
         ref={toggleButtonRef}
         id="toggleControls"

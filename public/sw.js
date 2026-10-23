@@ -4,6 +4,7 @@ const META_CACHE = `${CACHE_PREFIX}metadata-v1`;
 const FALLBACK_TILE_CACHE = `${CACHE_PREFIX}images-runtime-v3`;
 const VERSION_KEY = new URL('/__sl2_tile_cache_version__', self.location.origin).href;
 const MAX_PRECACHE_FILES = 3000;
+const NETWORK_ONLY_PATHS = new Set(['/version.json', '/cache-version.json', '/cache-manifest.json']);
 
 let tileCacheNamePromise;
 
@@ -16,6 +17,13 @@ function cacheNameForVersion(version) {
 async function rememberTileVersion(version) {
   const cache = await caches.open(META_CACHE);
   await cache.put(VERSION_KEY, new Response(version, { headers: { 'content-type': 'text/plain' } }));
+  const current = cacheNameForVersion(version);
+  const keys = await caches.keys();
+  await Promise.all(
+    keys
+      .filter((key) => key.startsWith(`${CACHE_PREFIX}images-`) && key !== current)
+      .map((key) => caches.delete(key))
+  );
 }
 
 async function resolveTileCacheName(refresh = false) {
@@ -106,6 +114,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (!request.url.startsWith(self.location.origin)) return;
+  if (NETWORK_ONLY_PATHS.has(new URL(request.url).pathname)) return;
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
       const cache = await caches.open(APP_CACHE);
