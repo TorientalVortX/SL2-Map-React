@@ -1,0 +1,128 @@
+.arranger {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    height: 100dvh;
+}
+
+.arranger-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    padding: 16px;
+    background: var(--ui-surface);
+    border-right: 1px solid var(--ui-border);
+}
+
+.arranger-panel h2 {
+    margin: 2px 0 6px;
+}
+
+.arranger-hint,
+.arranger-name span,
+.arranger-status {
+    color: var(--ui-muted);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.arranger-options {
+    display: grid;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.arranger-options label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.arranger-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    list-style: none;
+    display: grid;
+    align-content: start;
+    gap: 4px;
+}
+
+.arranger-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 8px;
+}
+
+.arranger-list li.selected {
+    background: rgba(118, 183, 255, 0.16);
+}
+
+.arranger-name {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 6px 4px;
+    background: transparent;
+    text-align: left;
+}
+
+.arranger-name:hover {
+    background: rgba(255, 255, 255, 0.06);
+    transform: none;
+    box-shadow: none;
+}
+
+.arranger-warning {
+    color: #ffb36b !important;
+}
+
+.arranger-small {
+    min-height: 30px;
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.arranger-actions {
+    display: grid;
+    gap: 8px;
+}
+
+.arranger-link {
+    color: var(--ui-accent);
+    font-size: 13px;
+    text-align: center;
+}
+
+.arranger-map {
+    background: #000;
+}
+
+.arranger-region {
+    outline: 2px solid rgba(255, 255, 255, 0.35);
+    cursor: move;
+}
+
+.arranger-region.selected {
+    outline: 3px solid var(--ui-highlight);
+    z-index: 5;
+}
+
+.arranger-region.review:not(.selected) {
+    outline: 2px solid #ffb36b;
+}
+
+.arranger-region.disabled {
+    outline-style: dashed;
+}
+
+.arranger-options select {
+    margin-left: 8px;
+    padding: 4px 6px;
+    border-radius: 6px;
+}

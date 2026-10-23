@@ -4,15 +4,20 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "npm run tiles",
     "dev": "vite",
+    "prebuild": "npm run tiles",
     "build": "vite build",
     "test": "node --test",
     "preview": "vite preview",
-    "slice-map": "node scripts/slice-map.js --input \"%MAP_INPUT%\" --outDir \"public/tiles\" --tileSize 800 --subfolderSize 6 --quality 75",
-    "stitch-worldmaps": "node scripts/stitch-worldmaps.js --tilesDir \"public/tiles\" --tileSize 800 --gridWidth 47 --gridHeight 54 --subfolderSize 6 --format jpg --outDir \"public\"",
-    "generate-cache-manifest": "node scripts/generate-cache-manifest.js"
+    "tiles": "node scripts/build-tiles.js",
+    "slice-map": "node scripts/slice-map.js --input \"%MAP_INPUT%\" --outDir \"map-source/tiles\" --tileSize 800 --subfolderSize 6 --quality 75",
+    "regions:fetch": "node scripts/fetch-regions.js",
+    "regions:place": "node scripts/place-regions.js",
+    "regions:compose": "node scripts/compose-regions.js"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
