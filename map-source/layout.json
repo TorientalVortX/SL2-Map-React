@@ -1,0 +1,304 @@
+{
+  "reference": {
+    "file": "reference.webp",
+    "scale": 16,
+    "width": 37600,
+    "height": 43200
+  },
+  "grid": {
+    "block": 4800,
+    "cell": 48,
+    "originX": 1344,
+    "originY": 2400
+  },
+  "regions": [
+    {
+      "file": "BTT7.png",
+      "x": 20544,
+      "y": 21600,
+      "enabled": true,
+      "review": false,
+      "matchScore": 21.5,
+      "modified": "2023-08-22"
+    },
+    {
+      "file": "BTT11.png",
+      "x": 20544,
+      "y": 31200,
+      "enabled": true,
+      "review": false,
+      "matchScore": 13,
+      "modified": "2023-08-22"
+    },
+    {
+      "file": "BTT13C 9112023.png",
+      "x": 15744,
+      "y": 13968,
+      "enabled": false,
+      "review": true,
+      "matchScore": 42.8,
+      "modified": "2023-09-11"
+    },
+    {
+      "file": "BTT2C.png",
+      "x": 25344,
+      "y": 16800,
+      "enabled": true,
+      "review": false,
+      "matchScore": 21.4,
+      "modified": "2023-09-11"
+    },
+    {
+      "file": "BTTC21C 10723.png",
+      "x": 28512,
+      "y": 2400,
+      "enabled": true,
+      "review": false,
+      "matchScore": 61.2,
+      "modified": "2023-10-06"
+    },
+    {
+      "file": "BTT20C 10623.png",
+      "x": 31872,
+      "y": 0,
+      "enabled": true,
+      "review": false,
+      "matchScore": 25.1,
+      "modified": "2023-10-06"
+    },
+    {
+      "file": "BTT7C LS 82923.png",
+      "x": 12624,
+      "y": 7200,
+      "enabled": false,
+      "review": false,
+      "matchScore": 45.9,
+      "modified": "2023-10-21"
+    },
+    {
+      "file": "BTT19C 102123.png",
+      "x": 25344,
+      "y": 7200,
+      "enabled": true,
+      "review": false,
+      "matchScore": 16.7,
+      "modified": "2023-10-21"
+    },
+    {
+      "file": "BTT9C 12423.png",
+      "x": 20544,
+      "y": 26400,
+      "enabled": true,
+      "review": false,
+      "matchScore": 17.8,
+      "modified": "2023-12-04"
+    },
+    {
+      "file": "BTT10C 12724.png",
+      "x": 15744,
+      "y": 26400,
+      "enabled": true,
+      "review": true,
+      "matchScore": 35.8,
+      "modified": "2024-01-27"
+    },
+    {
+      "file": "BTT15C 13024.png",
+      "x": 10944,
+      "y": 16800,
+      "enabled": false,
+      "review": false,
+      "matchScore": 13.3,
+      "modified": "2024-01-30"
+    },
+    {
+      "file": "BTT18C 31124.png",
+      "x": 20544,
+      "y": 12000,
+      "enabled": true,
+      "review": false,
+      "matchScore": 17.5,
+      "modified": "2024-03-11"
+    },
+    {
+      "file": "BTT3C 31224.png",
+      "x": 25344,
+      "y": 12000,
+      "enabled": true,
+      "review": false,
+      "matchScore": 37,
+      "modified": "2024-03-12"
+    },
+    {
+      "file": "BTT16C 121823.png",
+      "x": 15744,
+      "y": 12000,
+      "enabled": true,
+      "review": false,
+      "matchScore": 28.9,
+      "modified": "2024-04-17"
+    },
+    {
+      "file": "BTT17C 42024.png",
+      "x": 10896,
+      "y": 12000,
+      "enabled": false,
+      "review": true,
+      "matchScore": 33.8,
+      "modified": "2024-04-20"
+    },
+    {
+      "file": "BTT22C 81324.png",
+      "x": 20544,
+      "y": 7200,
+      "enabled": true,
+      "review": false,
+      "matchScore": 20.2,
+      "modified": "2024-08-13"
+    },
+    {
+      "file": "BTT1C 42025.png",
+      "x": 30144,
+      "y": 15216,
+      "enabled": true,
+      "review": false,
+      "matchScore": 35.6,
+      "modified": "2025-04-25"
+    },
+    {
+      "file": "BTT1eC 672025.png",
+      "x": 34944,
+      "y": 15861,
+      "enabled": true,
+      "review": false,
+      "matchScore": 22.4,
+      "modified": "2025-06-07"
+    },
+    {
+      "file": "BTT5C 652025.png",
+      "x": 30144,
+      "y": 21696,
+      "enabled": true,
+      "review": false,
+      "matchScore": 21.5,
+      "modified": "2025-06-22"
+    },
+    {
+      "file": "BTT25C 7182025.png",
+      "x": 6156,
+      "y": 31577,
+      "enabled": true,
+      "review": false,
+      "matchScore": 35.9,
+      "modified": "2025-07-18"
+    },
+    {
+      "file": "BTT24C 7182025.png",
+      "x": 10848,
+      "y": 31200,
+      "enabled": true,
+      "review": false,
+      "matchScore": 26.3,
+      "modified": "2025-07-18"
+    },
+    {
+      "file": "BTT23C 7182025.png",
+      "x": 15744,
+      "y": 31200,
+      "enabled": true,
+      "review": false,
+      "matchScore": 21.6,
+      "modified": "2025-07-18"
+    },
+    {
+      "file": "BTT4C 420205.png",
+      "x": 25344,
+      "y": 21600,
+      "enabled": true,
+      "review": false,
+      "matchScore": 16.4,
+      "modified": "2025-07-20"
+    },
+    {
+      "file": "BTT26D 7202025.png",
+      "x": 30144,
+      "y": 26400,
+      "enabled": true,
+      "review": false,
+      "matchScore": 28.5,
+      "modified": "2025-12-03"
+    },
+    {
+      "file": "BTT6D 7202025.png",
+      "x": 25344,
+      "y": 26400,
+      "enabled": true,
+      "review": false,
+      "matchScore": 24.2,
+      "modified": "2025-12-03"
+    },
+    {
+      "file": "BTT17C 5282026.png",
+      "x": 10944,
+      "y": 12000,
+      "enabled": true,
+      "review": false,
+      "matchScore": 33.5,
+      "modified": "2026-05-28"
+    },
+    {
+      "file": "BTT15D 672026.png",
+      "x": 10944,
+      "y": 16800,
+      "enabled": false,
+      "review": false,
+      "matchScore": 13.1,
+      "modified": "2026-06-07"
+    },
+    {
+      "file": "BTT15C 672026.png",
+      "x": 10944,
+      "y": 16800,
+      "enabled": true,
+      "review": false,
+      "matchScore": 11.7,
+      "modified": "2026-06-07"
+    },
+    {
+      "file": "BTTD13C 6102026.png",
+      "x": 15744,
+      "y": 16800,
+      "enabled": true,
+      "review": false,
+      "matchScore": 42.2,
+      "modified": "2026-07-10"
+    },
+    {
+      "file": "BTT8.png",
+      "x": 15744,
+      "y": 21600,
+      "enabled": true,
+      "review": false,
+      "matchScore": 21.4,
+      "modified": "2023-08-22"
+    },
+    {
+      "file": "BTT12 C 2224.png",
+      "x": 15744,
+      "y": 36000,
+      "enabled": true,
+      "review": false,
+      "matchScore": 26.4,
+      "modified": "2024-02-02"
+    },
+    {
+      "file": "BTT6.png",
+      "x": 27984,
+      "y": 33744,
+      "enabled": false,
+      "review": false,
+      "matchScore": 36.5,
+      "modified": "2023-08-22"
+    }
+  ]
+}
