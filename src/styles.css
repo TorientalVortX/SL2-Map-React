@@ -668,6 +668,31 @@ button svg {
     display: block;
 }
 
+.update-banner {
+    position: absolute;
+    top: var(--safe-top);
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100vw - var(--safe-left) - var(--safe-right));
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px 12px;
+    padding: 8px 12px;
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 2500;
+}
+
+.update-banner button {
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
 /* Preload modal */
 .modal-overlay {
     position: fixed;
