@@ -8,6 +8,7 @@
     "dev": "vite",
     "prebuild": "npm run tiles",
     "build": "vite build",
+    "pretest": "npm run tiles",
     "test": "node --test",
     "preview": "vite preview",
     "tiles": "node scripts/build-tiles.js",
