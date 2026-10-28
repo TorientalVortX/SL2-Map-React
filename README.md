@@ -37,7 +37,17 @@ Pins come from `src/data/locations.json`:
 ```
 
 `x`/`y` are pixels on the full-resolution map. `type` sets the pin colour (`nation`, `town`, `landmark`, `dungeon`) and appears as a filter in the panel once there is more than one type.
-In `npm run dev`, right-click (or long-press) the map to get a ready-made entry for that spot.
+
+Add `"scale": "local"` for places that only matter up close (towns, taverns, landmarks inside a nation). Without it a pin is a world pin.
+World pins show up to zoom 4, local pins from zoom 3.5, so both show between the two. The selected pin always shows.
+The thresholds are in `src/lib/markerScale.js`.
+
+In `npm run dev`:
+
+- Drag a pin to move it. The new position is saved to `locations.json`.
+- Right-click (or long-press) the map to get a ready-made entry for that spot. It includes `"scale": "local"` when you are zoomed in past the world range.
+
+`npm test` checks every entry: unique ids, a name, a type with a pin colour, a valid scale and coordinates on the map.
 
 ## Sharing
 
@@ -49,7 +59,8 @@ Right-click / long-press any spot, or use **Copy link** on a location card.
 - `npm run dev`: dev server at `http://localhost:5173/`
 - `npm run build`: production build into `dist/`
 - `npm run preview`: serve the production build
-- `npm test`: unit tests (`node --test`)
+- `npm test`: unit tests and location checks (`node --test`, builds tiles first if needed)
+- `npm run lint`: ESLint, zero warnings allowed
 - `npm run tiles`: build the tile pyramid
 - `npm run slice-map`: slice a single large image into `map-source/tiles` (set `MAP_INPUT` to the image path)
 
@@ -61,3 +72,7 @@ $env:MAP_INPUT = "C:\path\to\mapfile.png"; npm run slice-map
 
 Build command `npm run build`, output directory `dist`. The build generates the tiles (about 30 s), so dev dependencies (`sharp`) must be installed during the build.
 `public/_headers` sets long-lived caching for `/tiles/*` and `/assets/*`.
+
+Each build writes `version.json` with a build id. Open tabs check it when they regain focus and every 10 minutes, and show a reload banner after a deploy.
+
+GitHub Actions runs lint, build and tests on pushes to `main` and on pull requests.
