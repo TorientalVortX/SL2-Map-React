@@ -3,6 +3,7 @@ import L from 'leaflet'
 import { createMapCrs, createMapTileLayer, getContentBounds } from '../lib/mapTiles.js'
 import { formatViewHash } from '../lib/viewHash.js'
 import { focusZoom, markerScale, showsLocal, showsWorld } from '../lib/markerScale.js'
+import { SmoothWheelZoom } from '../lib/smoothWheelZoom.js'
 
 const PIN_ICON_SIZE = [32, 32]
 const PIN_ICON_ANCHOR = [16, 39]
@@ -96,13 +97,15 @@ const MapView = forwardRef(function MapView({ tileIndex, locations, selectedId, 
       maxZoom: tileIndex.maxNativeZoom + 2,
       zoomSnap: 0.25,
       zoomDelta: 0.5,
-      wheelPxPerZoomLevel: 90,
+      scrollWheelZoom: false,
+      smoothWheelZoom: true,
       maxBounds: bounds.pad(0.25),
       maxBoundsViscosity: 0.8,
       zoomControl: false,
       attributionControl: false,
       keyboardPanDelta: 120,
     })
+    map.addHandler('smoothWheelZoom', SmoothWheelZoom)
     mapRef.current = map
     map.getContainer().setAttribute('aria-label', 'Interactive SL2 world map')
     map.getContainer().setAttribute('aria-describedby', 'keyboardHelpText')
