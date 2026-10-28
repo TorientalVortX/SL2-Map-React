@@ -12,7 +12,7 @@ const PREVIEW_SIZE = 600;
 const MAX_BODY_BYTES = 1024 * 1024;
 const run = promisify(execFile);
 
-function sendJson(res, status, body) {
+export function sendJson(res, status, body) {
   res.statusCode = status;
   res.setHeader('content-type', 'application/json');
   res.end(JSON.stringify(body));
@@ -24,7 +24,7 @@ function sendFile(res, file, type) {
   fs.createReadStream(file).pipe(res);
 }
 
-async function readBody(req) {
+export async function readBody(req) {
   let size = 0;
   const chunks = [];
   for await (const chunk of req) {

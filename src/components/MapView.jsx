@@ -51,6 +51,21 @@ function buildPointPopup(point, zoom) {
   return container
 }
 
+async function saveMarkerPosition(marker, location) {
+  const { lat, lng } = marker.getLatLng()
+  try {
+    const response = await fetch(`/__locations/${encodeURIComponent(location.id)}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ x: lng, y: lat }),
+    })
+    if (!response.ok) throw new Error((await response.json()).error)
+  } catch (error) {
+    marker.setLatLng([location.y, location.x])
+    console.error(`Could not move ${location.name}:`, error)
+  }
+}
+
 const MapView = forwardRef(function MapView({ tileIndex, locations, selectedId, initialView, onSelectLocation, onViewChange, onLoadingChange }, ref) {
   const containerRef = useRef(null)
   const mapRef = useRef(null)
@@ -132,7 +147,10 @@ const MapView = forwardRef(function MapView({ tileIndex, locations, selectedId, 
         icon: createPinIcon(location.type),
         title: '',
         riseOnHover: true,
+        draggable: import.meta.env.DEV,
+        autoPan: true,
       })
+      if (import.meta.env.DEV) marker.on('dragend', () => saveMarkerPosition(marker, location))
       marker.bindTooltip(location.name, { direction: 'top', offset: [0, -PIN_ICON_ANCHOR[1]] })
       marker.on('click', () => callbacksRef.current.onSelectLocation?.(location))
       marker.on('add', () => marker.getElement()?.setAttribute('aria-label', location.name))
