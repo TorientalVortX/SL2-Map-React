@@ -1,14 +1,8 @@
 [
-  {
-    "id": 1756967094317,
-    "name": "Telegrad",
-    "x": 33048,
-    "y": 19279,
-    "type": "nation",
-    "description": "The East, The Evergreens, The Valley of a Thousand Homesteads. Fed by the Halard Reservoir and the Central Lake, the Federation of Telegrad has grown beyond its valley to become a large and expansive place, considered by many to be an idyllic paradise. No merchant schemes, no draft, no existential threat that looms in the outskirts."
-  },
-  { "id": 1756967284265, "name": "Duyuei", "x": 21831, "y": 28405, "type": "nation", "description": "" },
-  { "id": 1756967324302, "name": "Geladyne", "x": 12510, "y": 18866, "type": "nation", "description": "" },
-  { "id": 1756967349665, "name": "Meiaquar", "x": 22771, "y": 10027, "type": "nation", "description": "" },
-  { "id": 1756967393658, "name": "Yokoshura", "x": 9795, "y": 30658, "type": "nation", "description": "" }
+  {"id":1756967094317,"name":"Telegrad","x":30972,"y":18500,"type":"nation","description":"The East, The Evergreens, The Valley of a Thousand Homesteads. Fed by the Halard Reservoir and the Central Lake, the Federation of Telegrad has grown beyond its valley to become a large and expansive place, considered by many to be an idyllic paradise. No merchant schemes, no draft, no existential threat that looms in the outskirts."},
+  {"id":1756967284265,"name":"Duyuei","x":22300,"y":27566,"type":"nation","description":""},
+  {"id":1756967324302,"name":"Geladyne","x":13267,"y":18319,"type":"nation","description":"Geladyne is a militaristic monarchy that carries itself with due selfishness on the world stage."},
+  {"id":1756967349665,"name":"Meiaquar","x":23004,"y":8534,"type":"nation","description":"Meiaquar is an economic powerhouse, a nation built upon commerce through its ports, craftsmen, and exports. The northernmost influence of Korvara, where crime is potentially around every corner."},
+  {"id":1756967393658,"name":"Yokoshura","x":7931,"y":33431,"type":"nation","description":"Yokoshura is an eastern-styled desert nation in the southwestern reaches of Korvara. Its golden Myr Tree bears jewel-like seeds that can reverse the desertification of its lands, for a price in blood the Yokoshurans willingly pay."},
+  {"id":1793200082463,"name":"Wanderer's Vale","x":20183,"y":15887,"type":"nation","description":"The Wanderer's Vale acts as a small mini-territory/nation that values its independence and neutrality greatly. It hosts the biggest mega-tavern/inn with a heavily enchanted arena inside for fights that can be safely spectated. While it makes good coin through the heavy travel traffic it gets, it also acts as a trade hub for additional coin and even an adventuring hub with its quest system."}
 ]
