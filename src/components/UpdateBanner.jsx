@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useUpdateAvailable } from '../lib/useUpdateAvailable.js'
 
 export default function UpdateBanner() {

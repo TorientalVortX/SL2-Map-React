@@ -1,4 +1,4 @@
-import React, { forwardRef } from 'react'
+import { forwardRef } from 'react'
 
 const ControlsPanel = forwardRef(function ControlsPanel(
   { open, query, onQueryChange, results, onPickResult, types, activeTypes, onToggleType, onOpenOffline },

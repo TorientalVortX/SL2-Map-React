@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MapView from './components/MapView.jsx'
 import ControlsPanel from './components/ControlsPanel.jsx'
 import LocationCard from './components/LocationCard.jsx'
@@ -50,6 +50,7 @@ export default function App() {
 
   useEffect(() => {
     if (initialHash.locationId && !initialHash.view && selectedLocation) mapRef.current?.flyToLocation(selectedLocation)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on first load
   }, [])
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 const IDLE_STATE = { running: false, completed: 0, total: 0, failed: 0, error: '' }
 const FOCUSABLE_SELECTOR = 'button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex="-1"])'

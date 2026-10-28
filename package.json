@@ -10,6 +10,7 @@
     "build": "vite build",
     "pretest": "npm run tiles",
     "test": "node --test",
+    "lint": "eslint . --max-warnings 0",
     "preview": "vite preview",
     "tiles": "node scripts/build-tiles.js",
     "slice-map": "node scripts/slice-map.js --input \"%MAP_INPUT%\" --outDir \"map-source/tiles\" --tileSize 800 --subfolderSize 6 --quality 75",
@@ -23,7 +24,12 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.17.0",
     "@vitejs/plugin-react": "^4.0.0",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.14.0",
     "sharp": "^0.33.5",
     "vite": "^5.0.0"
   }

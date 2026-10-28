@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { createMapCrs } from '../lib/mapTiles.js'
 import './arranger.css'
@@ -92,6 +92,7 @@ export default function RegionArranger({ tileIndex }) {
   }, [])
 
   useEffect(() => {
+    const overlays = overlaysRef.current
     const map = L.map(containerRef.current, {
       crs: createMapCrs(tileIndex),
       minZoom: -2,
@@ -105,7 +106,7 @@ export default function RegionArranger({ tileIndex }) {
     return () => {
       map.remove()
       mapRef.current = null
-      overlaysRef.current.clear()
+      overlays.clear()
     }
   }, [tileIndex])
 

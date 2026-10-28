@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import L from 'leaflet'
 import { createMapCrs, createMapTileLayer, getContentBounds } from '../lib/mapTiles.js'
 import { formatViewHash } from '../lib/viewHash.js'
@@ -91,6 +91,7 @@ const MapView = forwardRef(function MapView({ tileIndex, locations, selectedId, 
   }), [tileIndex])
 
   useEffect(() => {
+    const markers = markersRef.current
     const bounds = getContentBounds(tileIndex)
     const map = L.map(containerRef.current, {
       crs: createMapCrs(tileIndex),
@@ -141,12 +142,14 @@ const MapView = forwardRef(function MapView({ tileIndex, locations, selectedId, 
     return () => {
       map.remove()
       mapRef.current = null
-      markersRef.current.clear()
+      markers.clear()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialView only applies when the map is created
   }, [tileIndex])
 
   useEffect(() => {
     const map = mapRef.current
+    const markers = markersRef.current
     if (!map) return undefined
     const layer = L.layerGroup().addTo(map)
     locations.forEach((location) => {
@@ -162,11 +165,11 @@ const MapView = forwardRef(function MapView({ tileIndex, locations, selectedId, 
       marker.on('click', () => callbacksRef.current.onSelectLocation?.(location))
       marker.on('add', () => marker.getElement()?.setAttribute('aria-label', location.name))
       marker.addTo(layer)
-      markersRef.current.set(String(location.id), { marker, location })
+      markers.set(String(location.id), { marker, location })
     })
     return () => {
       layer.remove()
-      markersRef.current.clear()
+      markers.clear()
     }
   }, [locations])
 
