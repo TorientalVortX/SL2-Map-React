@@ -2,8 +2,8 @@ import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react
 import L from 'leaflet'
 import { createMapCrs, createMapTileLayer, getContentBounds } from '../lib/mapTiles.js'
 import { formatViewHash } from '../lib/viewHash.js'
+import { focusZoom, markerScale, showsLocal, showsWorld } from '../lib/markerScale.js'
 
-const FOCUS_ZOOM_OFFSET = 0.5
 const PIN_ICON_SIZE = [32, 32]
 const PIN_ICON_ANCHOR = [16, 39]
 
@@ -12,10 +12,10 @@ function toView(map) {
   return { x: center.lng, y: center.lat, z: map.getZoom() }
 }
 
-function createPinIcon(type) {
+function createPinIcon(location) {
   return L.divIcon({
-    className: 'map-marker',
-    html: `<span class="map-pin type-${type}"></span>`,
+    className: `map-marker scale-${markerScale(location)}`,
+    html: `<span class="map-pin type-${location.type}"></span>`,
     iconSize: PIN_ICON_SIZE,
     iconAnchor: PIN_ICON_ANCHOR,
   })
@@ -44,7 +44,8 @@ function buildPointPopup(point, zoom) {
     const template = document.createElement('textarea')
     template.readOnly = true
     template.className = 'location-template'
-    template.value = JSON.stringify({ id: Date.now(), name: 'New Location', x: point.x, y: point.y, type: 'landmark', description: '' })
+    const scale = showsWorld(zoom) ? {} : { scale: 'local' }
+    template.value = JSON.stringify({ id: Date.now(), name: 'New Location', x: point.x, y: point.y, type: 'landmark', ...scale, description: '' })
     template.addEventListener('focus', () => template.select())
     container.append(template)
   }
@@ -82,8 +83,7 @@ const MapView = forwardRef(function MapView({ tileIndex, locations, selectedId, 
     flyToLocation: (location) => {
       const map = mapRef.current
       if (!map) return
-      const zoom = Math.max(map.getZoom(), tileIndex.maxNativeZoom - FOCUS_ZOOM_OFFSET)
-      map.flyTo([location.y, location.x], zoom, { duration: 0.9 })
+      map.flyTo([location.y, location.x], focusZoom(location, map.getZoom()), { duration: 0.9 })
     },
     getZoom: () => mapRef.current?.getZoom() ?? tileIndex.maxNativeZoom,
     contains: (element) => containerRef.current?.contains(element) ?? false,
@@ -117,9 +117,13 @@ const MapView = forwardRef(function MapView({ tileIndex, locations, selectedId, 
     tiles.on('load', () => callbacksRef.current.onLoadingChange?.(false))
     tiles.addTo(map)
 
-    const updateOverzoom = () => map.getContainer().classList.toggle('overzoomed', map.getZoom() > tileIndex.maxNativeZoom)
-    updateOverzoom()
-    map.on('zoomend', updateOverzoom)
+    const updateZoomClasses = () => {
+      map.getContainer().classList.toggle('overzoomed', map.getZoom() > tileIndex.maxNativeZoom)
+      map.getContainer().classList.toggle('hide-world', !showsWorld(map.getZoom()))
+      map.getContainer().classList.toggle('hide-local', !showsLocal(map.getZoom()))
+    }
+    updateZoomClasses()
+    map.on('zoom', updateZoomClasses)
     map.on('resize', updateMinZoom)
     map.on('moveend', () => callbacksRef.current.onViewChange?.(toView(map)))
     map.on('contextmenu', (event) => {
@@ -144,7 +148,7 @@ const MapView = forwardRef(function MapView({ tileIndex, locations, selectedId, 
     const layer = L.layerGroup().addTo(map)
     locations.forEach((location) => {
       const marker = L.marker([location.y, location.x], {
-        icon: createPinIcon(location.type),
+        icon: createPinIcon(location),
         title: '',
         riseOnHover: true,
         draggable: import.meta.env.DEV,

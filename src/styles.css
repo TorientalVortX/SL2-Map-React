@@ -495,6 +495,11 @@ button svg {
     outline: none;
 }
 
+#mapCanvas.hide-local .map-marker.scale-local:not(.selected),
+#mapCanvas.hide-world .map-marker.scale-world:not(.selected) {
+    display: none;
+}
+
 .map-pin {
     position: absolute;
     inset: 0;
